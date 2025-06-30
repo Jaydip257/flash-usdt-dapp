@@ -52,10 +52,10 @@ console.log('Logo URL:', logoUrl);
           address: CONTRACT_ADDRESS,
           symbol: await contract.symbol(),
           decimals: await contract.decimals(),
-          image: window.location.origin + 'flash-usdt-dapp/logo.svg',
+          image: window.location.origin + '/flash-usdt-dapp/logo.svg',
         },
       },
-    })
+    });
     alert(added ? 'Token added!' : 'Failed to add token.');
   } catch (err) {
     console.error("Add Token Error:", err);
