@@ -42,7 +42,7 @@ async function listenBalance() {
 
 async function addToken() {
   try {
-const logoUrl = window.location.origin + 'flash-usdt-dapp/logo.svg';
+const logoUrl = window.location.origin + '/logo.svg';
 console.log('Logo URL:', logoUrl);
     const added = await window.ethereum.request({
       method: 'wallet_watchAsset',
