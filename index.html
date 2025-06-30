@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Flash USDT DApp</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <img src="logo.svg" alt="USDT Logo" width="48" />
+    <h1>Flash USDT DApp</h1>
+    <button id="connect-btn">Connect Wallet</button>
+  </header>
+  <main>
+    <div id="account">Not connected</div>
+    <div id="balance">$0.00</div>
+    <div class="form-group">
+      <button id="add-token-btn">Add USDT to Wallet</button>
+    </div>
+    <div class="form-group">
+      <input id="mint-to" placeholder="Mint to address" />
+      <input id="mint-amt" placeholder="Amount" />
+      <button id="mint-btn">Mint</button>
+    </div>
+    <div class="form-group">
+      <input id="trans-to" placeholder="Transfer to address" />
+      <input id="trans-amt" placeholder="Amount" />
+      <button id="trans-btn">Transfer</button>
+    </div>
+    <div class="form-group">
+      <input id="exp-to" placeholder="Address" />
+      <input id="exp-days" placeholder="Days from now" />
+      <button id="exp-btn">Set Expiry</button>
+    </div>
+    <div id="status"></div>
+  </main>
+  <script src="https://cdn.jsdelivr.net/npm/ethers/dist/ethers.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
