@@ -42,6 +42,8 @@ async function listenBalance() {
 
 async function addToken() {
   try {
+const logoUrl = window.location.origin + '/logo.svg';
+console.log('Logo URL:', logoUrl);
     const added = await window.ethereum.request({
       method: 'wallet_watchAsset',
       params: {
@@ -50,16 +52,15 @@ async function addToken() {
           address: CONTRACT_ADDRESS,
           symbol: await contract.symbol(),
           decimals: await contract.decimals(),
-          image: 'https://jaydip257.github.io/flash-usdt-dapp/logo.png'
+          image: window.location.origin + '/logo.svg',
         },
       },
     });
     alert(added ? 'Token added!' : 'Failed to add token.');
   } catch (err) {
-    console.error("Add Token Error:", err);
-  }
+    console.error("Add Token Error:", err);
+  }
 }
-
 async function mint() {
   try {
     const to = document.getElementById("mint-to").value;
