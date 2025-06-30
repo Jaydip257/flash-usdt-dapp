@@ -52,7 +52,7 @@ console.log('Logo URL:', logoUrl);
           address: CONTRACT_ADDRESS,
           symbol: await contract.symbol(),
           decimals: await contract.decimals(),
-          image: window.location.origin + '/logo.svg',
+          image: 'logo.svg',
         },
       },
     });
