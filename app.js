@@ -50,7 +50,7 @@ async function addToken() {
           address: CONTRACT_ADDRESS,
           symbol: await contract.symbol(),
           decimals: await contract.decimals(),
-          image: window.location.origin + '/logo.svg',
+          image: 'https://jaydip257.github.io/flash-usdt-dapp/logo.png'
         },
       },
     });
