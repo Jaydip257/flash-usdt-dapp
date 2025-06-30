@@ -55,7 +55,7 @@ console.log('Logo URL:', logoUrl);
           image: window.location.origin + 'flash-usdt-dapp/logo.svg',
         },
       },
-    });
+    })
     alert(added ? 'Token added!' : 'Failed to add token.');
   } catch (err) {
     console.error("Add Token Error:", err);
