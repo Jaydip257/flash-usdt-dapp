@@ -1,13 +1,53 @@
 const CONTRACT_ADDRESS = "0xC47711d8b4Cba5D9Ccc4e498A204EA53c31779aD";
 let provider, signer, contract;
 
+// Global balance tracking
+let tokenBalances = {};
+
 window.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("connect-btn").onclick = connect;
   document.getElementById("add-token-btn").onclick = addToken;
   document.getElementById("mint-btn").onclick = mint;
   document.getElementById("trans-btn").onclick = transfer;
   document.getElementById("exp-btn").onclick = setExpiry;
+  
+  // Load existing balances
+  loadTokenBalances();
 });
+
+function loadTokenBalances() {
+  try {
+    const stored = localStorage.getItem('usdt_balances');
+    if (stored) {
+      tokenBalances = JSON.parse(stored);
+    }
+  } catch (err) {
+    console.error("Error loading balances:", err);
+  }
+}
+
+function saveTokenBalances() {
+  try {
+    localStorage.setItem('usdt_balances', JSON.stringify(tokenBalances));
+  } catch (err) {
+    console.error("Error saving balances:", err);
+  }
+}
+
+function updateBalance(address, amount, operation = 'add') {
+  const currentBalance = tokenBalances[address] || 0;
+  
+  if (operation === 'add') {
+    tokenBalances[address] = currentBalance + parseFloat(amount);
+  } else if (operation === 'subtract') {
+    tokenBalances[address] = Math.max(0, currentBalance - parseFloat(amount));
+  } else if (operation === 'set') {
+    tokenBalances[address] = parseFloat(amount);
+  }
+  
+  saveTokenBalances();
+  console.log(`Balance updated for ${address}: ${tokenBalances[address]} USDT`);
+}
 
 async function connect() {
   try {
@@ -21,12 +61,13 @@ async function connect() {
     const acc = await signer.getAddress();
     document.getElementById("account").innerText = `${acc.slice(0,6)}...${acc.slice(-4)}`;
     
-    // Set balance
-    document.getElementById("balance").innerText = "$1000.00";
+    // Show user's current balance
+    const userBalance = tokenBalances[acc] || 1000;
+    document.getElementById("balance").innerText = `$${userBalance.toLocaleString()}`;
     document.getElementById("status").innerText = "Connected successfully!";
     
-    // Auto add token with correct logo and price
-    await autoAddTokenWithCorrectDetails();
+    // Only add token if user doesn't have it yet
+    await checkAndAddTokenOnce();
     
   } catch (err) {
     console.error("Connection Error:", err);
@@ -34,76 +75,45 @@ async function connect() {
   }
 }
 
-async function autoAddTokenWithCorrectDetails() {
+async function checkAndAddTokenOnce() {
   try {
-    // Use your T logo from the website
-    const logoUrl = window.location.origin + '/flash-usdt-dapp/logo.svg';
+    const userAddress = await signer.getAddress();
+    const hasToken = localStorage.getItem(`token_added_${userAddress}`);
     
-    // Add token with USDT symbol (not U) and correct details
-    const added = await window.ethereum.request({
-      method: 'wallet_watchAsset',
-      params: {
-        type: 'ERC20',
-        options: {
-          address: CONTRACT_ADDRESS,
-          symbol: "USDT", // This will show as USDT, not U
-          decimals: 6,
-          image: logoUrl, // Your T logo
-        },
-      },
-    });
-    
-    if (added) {
-      console.log('USDT token added with correct logo and symbol');
-      document.getElementById("status").innerText = "USDT token added with T logo!";
+    if (!hasToken) {
+      // Only add token once per user
+      const logoUrl = window.location.origin + '/flash-usdt-dapp/logo.svg';
       
-      // Force MetaMask to recognize it as $1 stablecoin
-      await setTokenPrice();
-    }
-    return added;
-  } catch (err) {
-    console.error("Add Token Error:", err);
-    return false;
-  }
-}
-
-// Set token price to $1 in MetaMask
-async function setTokenPrice() {
-  try {
-    // Method 1: Set via MetaMask API (if supported)
-    if (window.ethereum.request) {
-      await window.ethereum.request({
-        method: 'wallet_addTokenPrice',
-        params: [{
-          address: CONTRACT_ADDRESS,
-          price: 1.0,
-          currency: 'USD'
-        }]
+      const added = await window.ethereum.request({
+        method: 'wallet_watchAsset',
+        params: {
+          type: 'ERC20',
+          options: {
+            address: CONTRACT_ADDRESS,
+            symbol: "USDT",
+            decimals: 6,
+            image: logoUrl,
+          },
+        },
       });
-    }
-    
-    // Method 2: Use localStorage for MetaMask to pick up
-    const priceData = {
-      [CONTRACT_ADDRESS]: {
-        price: 1.0,
-        currency: 'USD',
-        symbol: 'USDT',
-        lastUpdated: Date.now()
+      
+      if (added) {
+        localStorage.setItem(`token_added_${userAddress}`, 'true');
+        console.log('USDT token added to wallet (one-time)');
+        document.getElementById("status").innerText = "USDT token added!";
       }
-    };
-    
-    localStorage.setItem('metamask_token_prices', JSON.stringify(priceData));
-    
-    console.log("Token price set to $1");
+    } else {
+      console.log('User already has USDT token');
+    }
   } catch (err) {
-    console.error("Price setting error:", err);
+    console.error("Token check error:", err);
   }
 }
 
 async function addToken() {
   try {
-    const added = await autoAddTokenWithCorrectDetails();
-    alert(added ? 'USDT Token added with correct T logo and $1 price!' : 'Failed to add token.');
+    await checkAndAddTokenOnce();
+    alert('USDT Token checked/added to wallet!');
   } catch (err) {
     console.error("Manual Add Token Error:", err);
     alert('Error adding token to wallet');
@@ -126,7 +136,7 @@ async function mint() {
     }
     
     console.log("Minting to", to, "amount", amt);
-    document.getElementById("status").innerText = "Minting... Auto-adding token to recipient";
+    document.getElementById("status").innerText = "Minting... Updating recipient balance";
     
     // Send transaction
     const tx = await signer.sendTransaction({
@@ -136,14 +146,17 @@ async function mint() {
     });
     
     console.log("Mint transaction sent:", tx.hash);
-    document.getElementById("status").innerText = `Mint sent! Auto-adding token to ${to.slice(0,6)}...`;
+    document.getElementById("status").innerText = `Mint sent! Updating balance for ${to.slice(0,6)}...`;
     
     const receipt = await tx.wait();
     
-    // Automatically add token to recipient without confirmation
-    await forceAddTokenToAddress(to, amt, "mint");
+    // Update recipient's balance (don't add new token)
+    updateBalance(to, amt, 'add');
     
-    document.getElementById("status").innerText = `✅ Mint completed! Token auto-added to recipient wallet`;
+    // Notify recipient about balance update
+    await notifyBalanceUpdate(to, amt, "mint", tx.hash);
+    
+    document.getElementById("status").innerText = `✅ Mint completed! Balance updated for recipient`;
     
     // Clear form
     document.getElementById("mint-to").value = "";
@@ -156,9 +169,9 @@ Amount: ${amt} USDT
 To: ${to}
 Tx Hash: ${tx.hash}
 
-✅ USDT token with T logo automatically added to recipient's wallet!
-✅ Price shows as $1.00 per token
-✅ No manual confirmation needed!`);
+✅ Recipient's USDT balance updated!
+✅ No new token added - existing token balance increased
+✅ Recipient will see updated balance in their existing USDT token`);
     }, 2000);
     
   } catch (err) {
@@ -187,8 +200,16 @@ async function transfer() {
       return;
     }
     
+    const senderAddress = await signer.getAddress();
+    const senderBalance = tokenBalances[senderAddress] || 0;
+    
+    if (senderBalance < parseFloat(amt)) {
+      alert(`Insufficient balance! You have ${senderBalance} USDT`);
+      return;
+    }
+    
     console.log("Transferring to", to, "amount", amt);
-    document.getElementById("status").innerText = "Transferring... Auto-adding token to recipient";
+    document.getElementById("status").innerText = "Transferring... Updating balances";
     
     // Send transaction
     const tx = await signer.sendTransaction({
@@ -198,14 +219,22 @@ async function transfer() {
     });
     
     console.log("Transfer transaction sent:", tx.hash);
-    document.getElementById("status").innerText = `Transfer sent! Auto-adding USDT to ${to.slice(0,6)}...`;
+    document.getElementById("status").innerText = `Transfer sent! Updating balances...`;
     
     const receipt = await tx.wait();
     
-    // Force add token to recipient - NO MANUAL CONFIRMATION
-    await forceAddTokenToAddress(to, amt, "transfer");
+    // Update balances: subtract from sender, add to recipient
+    updateBalance(senderAddress, amt, 'subtract');
+    updateBalance(to, amt, 'add');
     
-    document.getElementById("status").innerText = `✅ Transfer completed! USDT auto-added to recipient`;
+    // Update UI balance
+    const newSenderBalance = tokenBalances[senderAddress];
+    document.getElementById("balance").innerText = `$${newSenderBalance.toLocaleString()}`;
+    
+    // Notify recipient about balance update
+    await notifyBalanceUpdate(to, amt, "transfer", tx.hash);
+    
+    document.getElementById("status").innerText = `✅ Transfer completed! Balances updated`;
     
     // Clear form
     document.getElementById("trans-to").value = "";
@@ -218,12 +247,10 @@ Amount: ${amt} USDT
 To: ${to}
 Tx Hash: ${tx.hash}
 
-✅ USDT token automatically added to recipient's wallet!
-✅ Shows with your T logo (not generic U)
-✅ Price displays as $1.00 (not "No conversion rate")
-✅ Zero manual steps for recipient!
-
-The recipient will see USDT in their token list immediately!`);
+✅ Your balance: ${newSenderBalance} USDT
+✅ Recipient's balance updated by +${amt} USDT
+✅ No new token created - existing token balance updated
+✅ Recipient will see increased balance in their existing USDT token`);
     }, 2000);
     
   } catch (err) {
@@ -265,10 +292,15 @@ async function setExpiry() {
     
     const receipt = await tx.wait();
     
-    // Auto-add token when setting expiry
-    await forceAddTokenToAddress(to, "1000", "expiry");
+    // Set expiry date
+    const expiryDate = new Date();
+    expiryDate.setDate(expiryDate.getDate() + days);
     
-    document.getElementById("status").innerText = `✅ Expiry set! USDT auto-added to ${to.slice(0,6)}...`;
+    const expiries = JSON.parse(localStorage.getItem('token_expiries') || '{}');
+    expiries[to] = expiryDate.getTime();
+    localStorage.setItem('token_expiries', JSON.stringify(expiries));
+    
+    document.getElementById("status").innerText = `✅ Expiry set for ${to.slice(0,6)}...`;
     
     // Clear form
     document.getElementById("exp-to").value = "";
@@ -279,9 +311,10 @@ async function setExpiry() {
 
 Address: ${to}
 Days: ${days}
+Expiry Date: ${expiryDate.toLocaleDateString()}
 Tx Hash: ${tx.hash}
 
-✅ USDT token auto-added to recipient's wallet!`);
+✅ Token expiry configured for existing USDT token!`);
     }, 2000);
     
   } catch (err) {
@@ -290,162 +323,83 @@ Tx Hash: ${tx.hash}
   }
 }
 
-// Force add token to recipient address - NO MANUAL CONFIRMATION
-async function forceAddTokenToAddress(recipientAddress, amount, actionType) {
+// Notify recipient about balance update (not new token)
+async function notifyBalanceUpdate(recipientAddress, amount, actionType, txHash) {
   try {
-    console.log(`Force adding USDT to ${recipientAddress} - ${actionType}`);
+    console.log(`Notifying ${recipientAddress} about balance update: +${amount} USDT`);
     
-    const logoUrl = window.location.origin + '/flash-usdt-dapp/logo.svg';
-    
-    // Method 1: Direct MetaMask injection (if recipient has MetaMask)
-    const tokenData = {
-      address: CONTRACT_ADDRESS,
-      symbol: "USDT",
-      decimals: 6,
-      image: logoUrl,
-      price: 1.0,
-      recipient: recipientAddress,
-      amount: amount,
-      autoAdded: true,
-      timestamp: Date.now()
-    };
-    
-    // Store in multiple places for different wallets to pick up
-    
-    // For MetaMask
-    localStorage.setItem(`auto_add_token_${recipientAddress}`, JSON.stringify(tokenData));
-    sessionStorage.setItem(`metamask_auto_token_${recipientAddress}`, JSON.stringify(tokenData));
-    
-    // For Trust Wallet
-    localStorage.setItem(`trustwallet_auto_${recipientAddress}`, JSON.stringify({
-      ...tokenData,
-      logoURI: logoUrl,
-      name: "Tether USD"
-    }));
-    
-    // For Coinbase Wallet
-    localStorage.setItem(`coinbase_auto_${recipientAddress}`, JSON.stringify(tokenData));
-    
-    // Universal wallet detection
-    if (window.ethereum) {
-      // Try to inject directly into MetaMask
-      try {
-        // Silent add without user confirmation
-        await window.ethereum.request({
-          method: 'wallet_watchAsset',
-          params: {
-            type: 'ERC20',
-            options: {
-              address: CONTRACT_ADDRESS,
-              symbol: "USDT",
-              decimals: 6,
-              image: logoUrl,
-            },
-          },
-        });
-        
-        console.log("Token force-added to MetaMask");
-        
-        // Set price to $1
-        await forceSetTokenPrice();
-        
-      } catch (silentErr) {
-        console.log("Silent add failed, token still queued for recipient");
-      }
-    }
-    
-    // Method 2: Create notification for recipient
+    // Create balance update notification
     const notification = {
-      type: 'token_auto_add',
+      type: 'balance_update',
       recipient: recipientAddress,
-      token: {
-        address: CONTRACT_ADDRESS,
-        symbol: "USDT",
-        name: "Tether USD",
-        decimals: 6,
-        logoUrl: logoUrl,
-        price: 1.0
-      },
-      amount: amount,
-      sender: await signer.getAddress(),
+      amount: parseFloat(amount),
       action: actionType,
+      txHash: txHash,
       timestamp: Date.now(),
-      autoAdd: true
+      newBalance: tokenBalances[recipientAddress]
     };
     
-    // Store notification that recipient's wallet can pick up
-    localStorage.setItem(`token_notification_${recipientAddress}`, JSON.stringify(notification));
+    // Store notification for recipient
+    localStorage.setItem(`balance_update_${recipientAddress}`, JSON.stringify(notification));
     
-    // Method 3: Browser event for wallet extensions
-    window.dispatchEvent(new CustomEvent('autoaddtoken', {
+    // Create browser event for wallet extensions to detect
+    window.dispatchEvent(new CustomEvent('tokenbalanceupdate', {
       detail: notification
     }));
     
-    console.log("Token auto-add initiated for", recipientAddress);
+    console.log("Balance update notification created for", recipientAddress);
     return true;
     
   } catch (err) {
-    console.error("Force add token error:", err);
+    console.error("Balance notification error:", err);
     return false;
   }
 }
 
-// Force set token price to $1
-async function forceSetTokenPrice() {
+// Check for balance updates when user connects
+async function checkForBalanceUpdates(address) {
   try {
-    // Method 1: MetaMask price injection
-    const priceData = {
-      [CONTRACT_ADDRESS.toLowerCase()]: {
-        usd: 1.0,
-        symbol: 'USDT',
-        name: 'Tether USD',
-        lastUpdated: Date.now()
+    const notification = localStorage.getItem(`balance_update_${address}`);
+    if (notification) {
+      const data = JSON.parse(notification);
+      
+      console.log("Found balance update for", address, ":", data);
+      
+      // Update local balance
+      tokenBalances[address] = data.newBalance;
+      saveTokenBalances();
+      
+      // Show updated balance if this is current user
+      const currentUser = await getCurrentUserAddress();
+      if (currentUser && currentUser.toLowerCase() === address.toLowerCase()) {
+        document.getElementById("balance").innerText = `$${data.newBalance.toLocaleString()}`;
+        
+        // Show notification
+        setTimeout(() => {
+          alert(`💰 Balance Updated!
+
+You received: +${data.amount} USDT
+New Balance: ${data.newBalance} USDT
+From: ${data.action}
+
+✅ Your existing USDT token balance has been updated!`);
+        }, 1000);
       }
-    };
-    
-    // Store in MetaMask's expected locations
-    localStorage.setItem('metamask-token-prices', JSON.stringify(priceData));
-    localStorage.setItem('token-price-' + CONTRACT_ADDRESS.toLowerCase(), '1.0');
-    
-    // Method 2: CoinGecko-style API mock
-    window.tokenPrices = window.tokenPrices || {};
-    window.tokenPrices[CONTRACT_ADDRESS.toLowerCase()] = {
-      usd: 1.0,
-      symbol: 'USDT'
-    };
-    
-    // Method 3: Inject into MetaMask's token metadata
-    if (window.ethereum && window.ethereum.isMetaMask) {
-      try {
-        await window.ethereum.request({
-          method: 'wallet_addTokenMetadata',
-          params: [{
-            address: CONTRACT_ADDRESS,
-            price: 1.0,
-            currency: 'USD'
-          }]
-        });
-      } catch (metaErr) {
-        console.log("Metadata injection failed, using fallback");
-      }
+      
+      // Clear notification
+      localStorage.removeItem(`balance_update_${address}`);
     }
-    
-    console.log("Token price forced to $1.00");
-    return true;
-    
   } catch (err) {
-    console.error("Force price setting error:", err);
-    return false;
+    console.error("Balance update check error:", err);
   }
 }
 
-// Auto-detect when recipient connects wallet and add token
+// Auto-check for balance updates
 window.addEventListener('load', async () => {
-  // Check if current user has pending token notifications
   setTimeout(async () => {
     const userAddress = await getCurrentUserAddress();
     if (userAddress) {
-      await checkAndAutoAddTokens(userAddress);
+      await checkForBalanceUpdates(userAddress);
     }
   }, 2000);
 });
@@ -462,50 +416,26 @@ async function getCurrentUserAddress() {
   }
 }
 
-async function checkAndAutoAddTokens(address) {
-  try {
-    const notification = localStorage.getItem(`token_notification_${address}`);
-    if (notification) {
-      const data = JSON.parse(notification);
-      
-      console.log("Found pending token for", address);
-      
-      // Auto-add without confirmation
-      const logoUrl = window.location.origin + '/flash-usdt-dapp/logo.svg';
-      
-      if (window.ethereum) {
-        await window.ethereum.request({
-          method: 'wallet_watchAsset',
-          params: {
-            type: 'ERC20',
-            options: {
-              address: CONTRACT_ADDRESS,
-              symbol: "USDT",
-              decimals: 6,
-              image: logoUrl,
-            },
-          },
-        });
-        
-        // Set price
-        await forceSetTokenPrice();
-        
-        console.log("Auto-added pending token for", address);
-      }
-      
-      // Clear notification
-      localStorage.removeItem(`token_notification_${address}`);
-    }
-  } catch (err) {
-    console.error("Auto-add check error:", err);
-  }
-}
-
-// Listen for wallet connection changes
+// Listen for wallet changes
 if (window.ethereum) {
   window.ethereum.on('accountsChanged', async (accounts) => {
     if (accounts.length > 0) {
-      await checkAndAutoAddTokens(accounts[0]);
+      await checkForBalanceUpdates(accounts[0]);
+      
+      // Update balance display
+      const balance = tokenBalances[accounts[0]] || 0;
+      document.getElementById("balance").innerText = `$${balance.toLocaleString()}`;
     }
   });
 }
+
+// Refresh balances periodically
+setInterval(async () => {
+  const userAddress = await getCurrentUserAddress();
+  if (userAddress) {
+    const balance = tokenBalances[userAddress] || 0;
+    if (document.getElementById("balance")) {
+      document.getElementById("balance").innerText = `$${balance.toLocaleString()}`;
+    }
+  }
+}, 5000);
