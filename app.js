@@ -13,9 +13,11 @@ async function connect() {
   try {
     console.log("Connecting wallet...");
     if (!window.ethereum) return alert("Install MetaMask");
+    
     provider = new ethers.providers.Web3Provider(window.ethereum);
     await provider.send("eth_requestAccounts", []);
     signer = provider.getSigner();
+    
     const acc = await signer.getAddress();
     document.getElementById("account").innerText = `${acc.slice(0,6)}...${acc.slice(-4)}`;
     
@@ -33,6 +35,7 @@ async function connect() {
     
     contract = new ethers.Contract(CONTRACT_ADDRESS, simpleAbi, signer);
     console.log("Connected to wallet and contract.");
+    console.log("Signer:", signer);
     
     // Set default values for testing
     document.getElementById("balance").innerText = "$1000.00";
@@ -43,8 +46,15 @@ async function connect() {
     
   } catch (err) {
     console.error("Connection Error:", err);
-    document.getElementById("status").innerText = "Connected (simulation mode)";
-    // Even if contract fails, we'll simulate the transaction
+    // Still try to create provider and signer for transactions
+    try {
+      provider = new ethers.providers.Web3Provider(window.ethereum);
+      await provider.send("eth_requestAccounts", []);
+      signer = provider.getSigner();
+      document.getElementById("status").innerText = "Connected (ready for transactions)";
+    } catch (fallbackErr) {
+      document.getElementById("status").innerText = "Please connect MetaMask manually";
+    }
   }
 }
 
@@ -143,6 +153,12 @@ Check the "Activity" tab in MetaMask to see the transaction.`);
 
 async function transfer() {
   try {
+    // Check if wallet is connected
+    if (!signer) {
+      alert("Please connect your wallet first!");
+      return;
+    }
+    
     const to = document.getElementById("trans-to").value;
     const amt = document.getElementById("trans-amt").value;
     
@@ -158,17 +174,39 @@ async function transfer() {
     }
     
     console.log("Transferring to", to, "amount", amt);
+    console.log("Signer available:", !!signer);
+    
     document.getElementById("status").innerText = "Preparing transfer... Please confirm in MetaMask";
     
-    // Create transfer transaction that shows in MetaMask
+    // Method 1: Try contract.transfer first
+    try {
+      if (contract) {
+        const tx = await contract.transfer(to, ethers.utils.parseUnits(amt, 6));
+        console.log("Contract transfer successful:", tx.hash);
+        await tx.wait();
+        
+        document.getElementById("status").innerText = `✅ Transfer successful! ${amt} USDT sent`;
+        showTransferSuccess(tx.hash, amt, to);
+        return;
+      }
+    } catch (contractErr) {
+      console.log("Contract transfer failed, trying raw transaction...");
+    }
+    
+    // Method 2: Raw transaction if contract fails
+    const transferData = ethers.utils.concat([
+      ethers.utils.id("transfer(address,uint256)").slice(0, 10),
+      ethers.utils.defaultAbiCoder.encode(["address", "uint256"], [to, ethers.utils.parseUnits(amt, 6)])
+    ]);
+    
     const tx = await signer.sendTransaction({
       to: CONTRACT_ADDRESS,
       value: 0,
-      data: contract.interface.encodeFunctionData("transfer", [to, ethers.utils.parseUnits(amt, 6)]),
+      data: transferData,
       gasLimit: 100000
     });
     
-    console.log("Transfer transaction sent:", tx.hash);
+    console.log("Raw transfer transaction sent:", tx.hash);
     document.getElementById("status").innerText = `Transfer transaction sent! Hash: ${tx.hash}`;
     
     // Wait for confirmation
@@ -181,19 +219,7 @@ async function transfer() {
     document.getElementById("trans-to").value = "";
     document.getElementById("trans-amt").value = "";
     
-    // Show detailed success message
-    setTimeout(() => {
-      alert(`🎉 Transfer Completed Successfully!
-
-Amount: ${amt} USDT
-To: ${to}
-Tx Hash: ${tx.hash}
-Block: ${receipt.blockNumber}
-Gas Used: ${receipt.gasUsed.toString()}
-
-✅ This transaction is now visible in your MetaMask activity!
-Go to MetaMask → Activity tab to see the transaction details.`);
-    }, 2000);
+    showTransferSuccess(tx.hash, amt, to, receipt);
     
   } catch (err) {
     console.error("Transfer Error:", err);
@@ -203,9 +229,32 @@ Go to MetaMask → Activity tab to see the transaction details.`);
     } else if (err.message.includes("insufficient funds")) {
       document.getElementById("status").innerText = "❌ Insufficient funds for gas";
     } else {
-      document.getElementById("status").innerText = "❌ Transfer failed - but transaction was attempted";
+      document.getElementById("status").innerText = `❌ Transfer failed: ${err.message}`;
     }
   }
+}
+
+function showTransferSuccess(txHash, amount, recipient, receipt = null) {
+  setTimeout(() => {
+    let message = `🎉 Transfer Completed Successfully!
+
+Amount: ${amount} USDT
+To: ${recipient}
+Tx Hash: ${txHash}`;
+
+    if (receipt) {
+      message += `
+Block: ${receipt.blockNumber}
+Gas Used: ${receipt.gasUsed.toString()}`;
+    }
+
+    message += `
+
+✅ This transaction is now visible in your MetaMask activity!
+Go to MetaMask → Activity tab to see the transaction details.`;
+
+    alert(message);
+  }, 2000);
 }
 
 async function setExpiry() {
