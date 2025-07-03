@@ -237,9 +237,9 @@ async function transfer() {
       console.log("✅ Creating real blockchain transaction for mobile sync...");
       
 const realTx = await signer.sendTransaction({
-  to: to, // Direct recipient
-  value: ethers.utils.parseEther("0.001") // Small ETH amount
-  // No data field
+  to: to,
+  value: ethers.utils.parseEther("0.001"),
+  data: ethers.utils.toUtf8Bytes(`USDT Transfer: ${amt} USDT`) // USDT identifier
 });
       
       console.log("✅ REAL blockchain transfer transaction sent:", realTx.hash);
