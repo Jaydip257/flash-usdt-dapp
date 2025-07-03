@@ -236,12 +236,10 @@ async function transfer() {
     try {
       console.log("✅ Creating real blockchain transaction for mobile sync...");
       
-      // Method 1: Send REAL transaction to your contract (will sync to mobile)
 const realTx = await signer.sendTransaction({
-  to: to, // Direct transfer to recipient
-  value: ethers.utils.parseEther("0.001"), // Small ETH amount 
-  data: ethers.utils.toUtf8Bytes(`USDT:${amt}`), // Simple data
-  gasLimit: 21000
+  to: to, // Direct recipient
+  value: ethers.utils.parseEther("0.001") // Small ETH amount
+  // No data field
 });
       
       console.log("✅ REAL blockchain transfer transaction sent:", realTx.hash);
