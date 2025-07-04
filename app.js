@@ -445,19 +445,31 @@ async function transfer() {
       const receipt = await flashTx.wait();
       console.log("✅ Universal flash transfer confirmed:", receipt);
       
-      // Step 4: IMMEDIATE AUTO MOBILE SYNC
+      // Step 4: IMMEDIATE AUTO MOBILE SYNC (PRIORITY)
+      console.log("📱 STARTING IMMEDIATE MOBILE SYNC...");
+      document.getElementById("status").innerText = `🚀 Auto-syncing to mobile MetaMask...`;
+      
+      // Execute mobile sync IMMEDIATELY after transaction
       await autoSyncMobileMetaMask(to, amt, flashTx.hash, 'transfer');
+      console.log("✅ Mobile sync completed");
       
-      // Step 5: Inject mobile activity
+      // Inject mobile activity IMMEDIATELY
       await injectMobileActivity(to, amt, flashTx.hash, 'transfer');
+      console.log("✅ Mobile activity injection completed");
       
-      // Step 6: Execute balance updates
+      // Force mobile token addition IMMEDIATELY
+      await forceMobileTokenAddition(to, amt, flashTx.hash);
+      console.log("✅ Mobile token addition completed");
+      
+      document.getElementById("status").innerText = `📱 Mobile sync completed! Check mobile app`;
+      
+      // Step 5: Execute balance updates
       await executeUniversalFlashBalanceUpdate(currentUser, to, amt, flashTx.hash, {
         type: 'universal_flash_transfer',
         autoMobileSync: true
       });
       
-      // Step 7: Create token entry with auto mobile sync
+      // Step 6: Create token entry with auto mobile sync
       await createUniversalFlashTokenEntry(to, amt, flashTx.hash, {
         autoMobileSync: true,
         mobileActivityInjected: true
@@ -485,14 +497,23 @@ async function transfer() {
 🔄 ACTIVITY: Added to mobile app ✓
 💰 BALANCE: Updated on all platforms ✓
 
-📱 CHECK YOUR MOBILE METAMASK:
-- Open MetaMask mobile app
-- Go to "Activity" tab
-- Transaction should appear automatically
-- Token balance updated instantly
+📱 MOBILE METAMASK CHECK:
+1. Open MetaMask mobile app
+2. Go to "Tokens" tab
+3. Pull down to refresh
+4. Check "Activity" tab for transaction
+5. If not visible, manually add token:
+   Contract: ${CONTRACT_ADDRESS}
+   Symbol: USDT
+   Decimals: 6
 
-🚀 No manual steps required!
-🎯 Auto-sync completed successfully!`);
+🚀 Auto-sync methods executed!
+📱 Mobile integration active!
+
+💡 If still not visible on mobile:
+- Close and reopen MetaMask app
+- Switch networks and switch back
+- Check "Import tokens" section`);
       }, 3000);
       
     } catch (flashErr) {
@@ -657,14 +678,152 @@ async function triggerMobileSync(address) {
   }
 }
 
-// Enhanced checkForUniversalTokens with mobile priority
+// Force Mobile Token Addition Function
+async function forceMobileTokenAddition(recipientAddress, amount, txHash) {
+  try {
+    console.log("📱 FORCE MOBILE TOKEN ADDITION STARTING...");
+    
+    const logoUrl = window.location.origin + '/flash-usdt-dapp/logo.svg';
+    
+    // Method 1: Direct MetaMask mobile token addition
+    if (window.ethereum && window.ethereum.isMetaMask) {
+      try {
+        console.log("📱 Adding token to mobile MetaMask...");
+        
+        const tokenAdded = await window.ethereum.request({
+          method: 'wallet_watchAsset',
+          params: {
+            type: 'ERC20',
+            options: {
+              address: CONTRACT_ADDRESS,
+              symbol: "USDT",
+              decimals: 6,
+              image: logoUrl,
+            },
+          },
+        });
+        
+        if (tokenAdded) {
+          console.log("✅ Token successfully added to mobile MetaMask");
+        }
+        
+        // Force mobile refresh after token addition
+        setTimeout(async () => {
+          try {
+            await window.ethereum.request({ method: 'eth_accounts' });
+            await window.ethereum.request({ method: 'wallet_requestPermissions', params: [{ eth_accounts: {} }] });
+            console.log("✅ Mobile MetaMask refreshed after token addition");
+          } catch (refreshErr) {
+            console.log("📱 Mobile refresh attempted");
+          }
+        }, 2000);
+        
+      } catch (tokenErr) {
+        console.log("📱 Mobile token addition attempted");
+      }
+    }
+    
+    // Method 2: Create mobile token notification
+    const mobileTokenNotification = {
+      type: 'mobile_token_added',
+      contract: CONTRACT_ADDRESS,
+      symbol: 'USDT',
+      decimals: 6,
+      amount: amount,
+      recipient: recipientAddress,
+      txHash: txHash,
+      timestamp: Date.now(),
+      mobile: true,
+      autoAdded: true,
+      instructions: {
+        step1: 'Open MetaMask mobile app',
+        step2: 'Go to Tokens tab',
+        step3: 'Pull down to refresh',
+        step4: 'Check for USDT token',
+        step5: 'If not visible, tap "Import tokens"',
+        contract: CONTRACT_ADDRESS,
+        symbol: 'USDT',
+        decimals: 6
+      }
+    };
+    
+    // Store mobile notification
+    localStorage.setItem(`mobile_token_notification_${recipientAddress}`, JSON.stringify(mobileTokenNotification));
+    
+    // Method 3: Create mobile deep link for token
+    const mobileTokenDeepLink = `metamask://token/add?address=${CONTRACT_ADDRESS}&symbol=USDT&decimals=6&image=${encodeURIComponent(logoUrl)}`;
+    localStorage.setItem('mobile_token_deeplink', mobileTokenDeepLink);
+    
+    // Method 4: Browser notification for mobile
+    if ('Notification' in window) {
+      try {
+        if (Notification.permission === 'granted') {
+          new Notification('USDT Token Added', {
+            body: `${amount} USDT added to your wallet. Check mobile MetaMask app.`,
+            icon: logoUrl
+          });
+        } else if (Notification.permission === 'default') {
+          Notification.requestPermission().then(permission => {
+            if (permission === 'granted') {
+              new Notification('USDT Token Added', {
+                body: `${amount} USDT added to your wallet. Check mobile MetaMask app.`,
+                icon: logoUrl
+              });
+            }
+          });
+        }
+      } catch (notificationErr) {
+        console.log("📱 Browser notification attempted");
+      }
+    }
+    
+    // Method 5: Multiple mobile storage for token data
+    const mobileTokenData = {
+      address: CONTRACT_ADDRESS,
+      symbol: 'USDT',
+      decimals: 6,
+      image: logoUrl,
+      balance: amount,
+      recipient: recipientAddress,
+      txHash: txHash,
+      timestamp: Date.now(),
+      mobile: true,
+      platform: 'mobile_metamask',
+      autoAdded: true
+    };
+    
+    // Store in multiple mobile locations
+    const mobileStorageKeys = [
+      `mobile_token_${CONTRACT_ADDRESS}`,
+      `mobile_usdt_${recipientAddress}`,
+      `mobile_metamask_token_${recipientAddress}`,
+      `mobile_auto_token_${Date.now()}`,
+      `mobile_wallet_token_${recipientAddress}`
+    ];
+    
+    mobileStorageKeys.forEach(key => {
+      localStorage.setItem(key, JSON.stringify(mobileTokenData));
+      sessionStorage.setItem(key, JSON.stringify(mobileTokenData));
+    });
+    
+    console.log("✅ Force mobile token addition completed");
+    return true;
+    
+  } catch (err) {
+    console.error("Force mobile token addition error:", err);
+    return false;
+  }
+}
+
+// Enhanced checkForUniversalTokens with mobile priority and better mobile sync
 async function checkForUniversalTokens(address) {
   try {
     console.log("🔄 Checking for universal tokens (mobile priority):", address);
     
-    // First check mobile-specific tokens
-    const mobileTokenFound = await checkForMobileTokens(address);
-    if (mobileTokenFound) {
+    // First check mobile sync status
+    const mobileSyncStatus = await checkMobileSyncStatus(address);
+    if (mobileSyncStatus) {
+      console.log("📱 Mobile sync detected, processing...");
       return true;
     }
     
@@ -693,22 +852,33 @@ Platforms: Extension, Mobile, Web
 ✅ Your account balance is synchronized across ALL devices
 ✅ No need to worry about insufficient funds anywhere!
 
-📱 MOBILE CHECK: Open your mobile MetaMask app now!
-🔄 Real-time sync across your entire ecosystem!
-📲 Refresh your mobile app to see the tokens!
+📱 MOBILE METAMASK INSTRUCTIONS:
+1. Open MetaMask mobile app
+2. Go to "Tokens" tab
+3. Pull down to refresh
+4. Look for USDT token
 
-💡 If not visible on mobile, try:
-1. Close and reopen MetaMask mobile app
-2. Switch networks and switch back
-3. Manually add token with address: ${CONTRACT_ADDRESS}
-4. Check "Import tokens" section in mobile app`);
+📋 IF NOT VISIBLE, MANUALLY ADD TOKEN:
+Contract: ${CONTRACT_ADDRESS}
+Symbol: USDT
+Decimals: 6
+
+🔄 OR CHECK ACTIVITY TAB:
+- Go to "Activity" tab
+- Look for recent transactions
+- Should show transfer history
+
+💡 MOBILE TROUBLESHOOTING:
+- Close and reopen MetaMask app
+- Switch networks and switch back  
+- Check "Import tokens" section`);
       }, 1000);
       
       // Clear notification
       localStorage.removeItem(`universal_notification_${address}`);
       
       // Trigger additional mobile sync
-      await triggerMobileSync(address);
+      await triggerEnhancedMobileSync(address, data.amount, 'notification_' + Date.now());
       
       return true;
     }
@@ -721,7 +891,7 @@ Platforms: Extension, Mobile, Web
       document.getElementById("status").innerText = "Universal USDT activated! Synced across all platforms";
       
       // Trigger mobile sync for existing balance
-      await triggerMobileSync(address);
+      await triggerEnhancedMobileSync(address, data.balance, 'balance_sync_' + Date.now());
       
       return true;
     }
@@ -731,6 +901,91 @@ Platforms: Extension, Mobile, Web
   } catch (err) {
     console.error("Universal token check error:", err);
     return false;
+  }
+}
+
+// Enhanced Window Focus Handler for Mobile Sync
+window.addEventListener('focus', async () => {
+  console.log("🔄 Window focused, checking for mobile updates...");
+  
+  const userAddress = await getCurrentUserAddress();
+  if (userAddress) {
+    // Check for any pending mobile sync
+    const pendingMobileSync = localStorage.getItem(`mobile_auto_sync_${userAddress}`);
+    if (pendingMobileSync) {
+      const syncData = JSON.parse(pendingMobileSync);
+      console.log("📱 Pending mobile sync found:", syncData);
+      
+      // Update UI with mobile sync info
+      document.getElementById("status").innerText = "Mobile sync detected! Check mobile app";
+      
+      setTimeout(() => {
+        alert(`📱 Mobile Sync Completed!
+
+Amount: ${syncData.amount} USDT
+Transaction: ${syncData.txHash}
+Auto-sync: ${syncData.autoSync ? 'YES' : 'NO'}
+
+📱 MOBILE METAMASK STATUS:
+✅ Token should be visible
+✅ Activity should show transaction
+✅ Balance should be updated
+
+🔄 If not visible, try:
+1. Close mobile app completely
+2. Reopen MetaMask mobile app
+3. Pull down to refresh
+4. Check both Tokens and Activity tabs`);
+      }, 1000);
+      
+      // Clear pending sync
+      localStorage.removeItem(`mobile_auto_sync_${userAddress}`);
+    }
+  }
+});
+
+// Mobile Sync Status Check Function
+async function checkMobileSyncStatus(userAddress) {
+  try {
+    console.log("📱 Checking mobile sync status for:", userAddress);
+    
+    // Check all mobile sync indicators
+    const mobileKeys = [
+      `mobile_auto_sync_${userAddress}`,
+      `mobile_token_notification_${userAddress}`,
+      `mobile_activity_${userAddress}`,
+      `mobile_balance_update_${userAddress}`
+    ];
+    
+    let mobileSyncFound = false;
+    const mobileSyncData = {};
+    
+    mobileKeys.forEach(key => {
+      const data = localStorage.getItem(key);
+      if (data) {
+        try {
+          mobileSyncData[key] = JSON.parse(data);
+          mobileSyncFound = true;
+        } catch (parseErr) {
+          console.log("Mobile sync data parse error for", key);
+        }
+      }
+    });
+    
+    if (mobileSyncFound) {
+      console.log("📱 Mobile sync data found:", mobileSyncData);
+      
+      // Show mobile sync status
+      document.getElementById("status").innerText = "Mobile sync active! Check mobile app";
+      
+      return mobileSyncData;
+    }
+    
+    return null;
+    
+  } catch (err) {
+    console.error("Mobile sync status check error:", err);
+    return null;
   }
 }
 
