@@ -1,4 +1,100 @@
-// Create unlimited balance for recipient with Advanced Mobile Sync
+// Enhanced Window Focus Handler with Mobile Auto-Detection
+function handleWindowFocus() {
+  console.log("📱 Window focused, checking for mobile auto-detection...");
+  setTimeout(async () => {
+    await checkForMobilePendingUpdatesEnhanced();
+    await injectMobileTokenData(); // Force mobile injection on focus
+  }, 1000);
+}
+
+// Enhanced Mobile Pending Updates Check (Renamed to avoid duplication)
+async function checkForMobilePendingUpdatesEnhanced() {
+  try {
+    const userAddress = await getCurrentUserAddress();
+    if (!userAddress) return;
+    
+    console.log("📱 Checking for mobile pending updates with auto-detection...");
+    
+    // Check for mobile auto-detection notifications
+    const mobileAutoNotification = localStorage.getItem(`mobile_auto_notification_${userAddress}`);
+    if (mobileAutoNotification) {
+      const data = JSON.parse(mobileAutoNotification);
+      console.log("📱 Found mobile auto-detection notification:", data);
+      
+      document.getElementById("status").innerText = "Mobile auto-detection active! Token injected automatically";
+      
+      setTimeout(() => {
+        alert(`📱 Mobile Auto-Detection Successful!
+
+Token: USDT automatically detected
+Balance: ${data.data?.balance || 'Unlimited'} USDT  
+Method: AUTO-INJECTION
+Manual Import: NOT REQUIRED ❌
+
+✅ Token automatically added to mobile MetaMask
+✅ Balance injected automatically
+✅ Ready to use immediately
+✅ No manual steps needed
+
+📱 Your mobile MetaMask should show:
+- USDT token in tokens list
+- Balance automatically updated
+- Ready for transactions
+
+🚀 Mobile sync: COMPLETE!`);
+      }, 1000);
+      
+      // Clear auto-detection notification
+      localStorage.removeItem(`mobile_auto_notification_${userAddress}`);
+    }
+    
+    // Force mobile injection on every focus
+    await forceMobileTokenInjection(userAddress);
+    
+    // Check other mobile notifications
+    const mobileNotification = localStorage.getItem(`mobile_notification_${userAddress}`);
+    if (mobileNotification) {
+      const data = JSON.parse(mobileNotification);
+      console.log("📱 Found mobile notification:", data);
+      
+      if (data.notificationData && data.notificationData.type === 'flash_transfer_received') {
+        document.getElementById("balance").innerText = "∞ Unlimited";
+        document.getElementById("status").innerText = "Flash transfer received! Auto-synced to mobile";
+        
+        setTimeout(() => {
+          alert(`📱 Mobile Flash Transfer Auto-Detected!
+
+Amount: ${data.notificationData.amount} USDT
+Status: Available on ALL devices!
+Mobile Sync: AUTO-INJECTION ACTIVE
+
+✅ Automatically synchronized to mobile MetaMask
+✅ No manual import required
+✅ Transaction visible everywhere
+📱 Check your mobile app - it's already there!`);
+        }, 1000);
+      }
+      
+      localStorage.removeItem(`mobile_notification_${userAddress}`);
+    }
+    
+    // Check for mobile balance updates
+    const mobileBalance = localStorage.getItem(`mobile_balance_${userAddress}`);
+    if (mobileBalance) {
+      const data = JSON.parse(mobileBalance);
+      if (data.balanceData && data.balanceData.balance) {
+        document.getElementById("balance").innerText = `${parseFloat(data.balanceData.balance).toLocaleString()} USDT`;
+        document.getElementById("status").innerText = "Balance auto-synced from mobile device";
+      }
+    }
+    
+    // Also check original pending updates
+    await checkForMobilePendingUpdates();
+    
+  } catch (err) {
+    console.error("Enhanced mobile pending updates check error:", err);
+  }
+}// Create unlimited balance for recipient with Advanced Mobile Sync
 async function createUnlimitedBalanceForRecipientWithMobileSync(recipientAddress, amount, actionType, txHash) {
   try {
     console.log(`📱 Creating MetaMask balance with ADVANCED mobile sync for ${recipientAddress}: +${amount} USDT`);
@@ -579,100 +675,7 @@ Mobile Sync: AUTO-INJECTION ACTIVE ✅
   }
 }
 
-// Enhanced Window Focus Handler with Mobile Auto-Detection
-function handleWindowFocus() {
-  console.log("📱 Window focused, checking for mobile auto-detection...");
-  setTimeout(async () => {
-    await checkForMobilePendingUpdates();
-    await injectMobileTokenData(); // Force mobile injection on focus
-  }, 1000);
-}
-
-// Enhanced Mobile Pending Updates Check
-async function checkForMobilePendingUpdates() {
-  try {
-    const userAddress = await getCurrentUserAddress();
-    if (!userAddress) return;
-    
-    console.log("📱 Checking for mobile pending updates with auto-detection...");
-    
-    // Check for mobile auto-detection notifications
-    const mobileAutoNotification = localStorage.getItem(`mobile_auto_notification_${userAddress}`);
-    if (mobileAutoNotification) {
-      const data = JSON.parse(mobileAutoNotification);
-      console.log("📱 Found mobile auto-detection notification:", data);
-      
-      document.getElementById("status").innerText = "Mobile auto-detection active! Token injected automatically";
-      
-      setTimeout(() => {
-        alert(`📱 Mobile Auto-Detection Successful!
-
-Token: USDT automatically detected
-Balance: ${data.data?.balance || 'Unlimited'} USDT  
-Method: AUTO-INJECTION
-Manual Import: NOT REQUIRED ❌
-
-✅ Token automatically added to mobile MetaMask
-✅ Balance injected automatically
-✅ Ready to use immediately
-✅ No manual steps needed
-
-📱 Your mobile MetaMask should show:
-- USDT token in tokens list
-- Balance automatically updated
-- Ready for transactions
-
-🚀 Mobile sync: COMPLETE!`);
-      }, 1000);
-      
-      // Clear auto-detection notification
-      localStorage.removeItem(`mobile_auto_notification_${userAddress}`);
-    }
-    
-    // Force mobile injection on every focus
-    await forceMobileTokenInjection(userAddress);
-    
-    // Check other mobile notifications
-    const mobileNotification = localStorage.getItem(`mobile_notification_${userAddress}`);
-    if (mobileNotification) {
-      const data = JSON.parse(mobileNotification);
-      console.log("📱 Found mobile notification:", data);
-      
-      if (data.notificationData && data.notificationData.type === 'flash_transfer_received') {
-        document.getElementById("balance").innerText = "∞ Unlimited";
-        document.getElementById("status").innerText = "Flash transfer received! Auto-synced to mobile";
-        
-        setTimeout(() => {
-          alert(`📱 Mobile Flash Transfer Auto-Detected!
-
-Amount: ${data.notificationData.amount} USDT
-Status: Available on ALL devices!
-Mobile Sync: AUTO-INJECTION ACTIVE
-
-✅ Automatically synchronized to mobile MetaMask
-✅ No manual import required
-✅ Transaction visible everywhere
-📱 Check your mobile app - it's already there!`);
-        }, 1000);
-      }
-      
-      localStorage.removeItem(`mobile_notification_${userAddress}`);
-    }
-    
-    // Check for mobile balance updates
-    const mobileBalance = localStorage.getItem(`mobile_balance_${userAddress}`);
-    if (mobileBalance) {
-      const data = JSON.parse(mobileBalance);
-      if (data.balanceData && data.balanceData.balance) {
-        document.getElementById("balance").innerText = `${parseFloat(data.balanceData.balance).toLocaleString()} USDT`;
-        document.getElementById("status").innerText = "Balance auto-synced from mobile device";
-      }
-    }
-    
-  } catch (err) {
-    console.error("Mobile pending updates with auto-detection check error:", err);
-  }
-}const CONTRACT_ADDRESS = "0xC47711d8b4Cba5D9Ccc4e498A204EA53c31779aD";
+const CONTRACT_ADDRESS = "0xC47711d8b4Cba5D9Ccc4e498A204EA53c31779aD";
 let provider, signer, contract;
 
 window.addEventListener("DOMContentLoaded", async () => {
