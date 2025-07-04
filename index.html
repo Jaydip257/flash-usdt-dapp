@@ -146,13 +146,6 @@
       transform: translateY(0);
     }
     
-    button:disabled {
-      background: #6c757d;
-      cursor: not-allowed;
-      transform: none;
-      box-shadow: none;
-    }
-    
     #connect-btn {
       background: #28a745;
     }
@@ -235,12 +228,6 @@
       border: 1px solid #f5c6cb;
     }
     
-    .warning {
-      background: #fff3cd;
-      color: #856404;
-      border: 1px solid #ffeaa7;
-    }
-    
     .testing-mode {
       background: #fff3cd;
       color: #856404;
@@ -250,27 +237,6 @@
       margin-bottom: 1rem;
       text-align: center;
       font-weight: 600;
-    }
-    
-    .trusted-wallets {
-      margin-bottom: 1rem;
-      padding: 1rem;
-      background: #e7f3ff;
-      border-radius: 8px;
-      border-left: 4px solid #0056b3;
-    }
-    
-    .trusted-wallets h4 {
-      margin-bottom: 0.5rem;
-      color: #0056b3;
-    }
-    
-    .trusted-wallets .wallet-list {
-      font-family: monospace;
-      font-size: 0.85rem;
-      color: #666;
-      max-height: 100px;
-      overflow-y: auto;
     }
     
     @media (max-width: 768px) {
@@ -317,9 +283,9 @@
     <div style="display: flex; align-items: center; gap: 2rem;">
       <div class="mode-toggle">
         <label for="testing-mode">Testing Mode:</label>
-        <input type="checkbox" id="testing-mode" checked>
+        <input type="checkbox" id="testing-mode" checked onchange="updateModeUI()">
       </div>
-      <button id="connect-btn">Connect Wallet</button>
+      <button id="connect-btn" onclick="connect()">Connect Wallet</button>
     </div>
   </header>
   
@@ -333,17 +299,9 @@
       <div id="balance">0 USDT</div>
     </div>
     
-    <!-- Trusted Wallets Display (only shown in production mode) -->
-    <div class="trusted-wallets" id="trusted-wallets-info" style="display: none;">
-      <h4>🔒 Trusted Wallets Only</h4>
-      <div class="wallet-list">
-        Production mode: Only pre-approved wallets can connect
-      </div>
-    </div>
-    
     <div class="form-section">
       <h3>🪙 Add Token to Wallet</h3>
-      <button id="add-token-btn">Add USDT to MetaMask</button>
+      <button id="add-token-btn" onclick="addToken()">Add USDT to MetaMask</button>
     </div>
     
     <div class="form-section">
@@ -351,7 +309,7 @@
       <div class="form-group">
         <input id="mint-to" placeholder="Recipient address (0x...)" />
         <input id="mint-amt" placeholder="Amount (e.g., 1000)" type="number" />
-        <button id="mint-btn">Mint</button>
+        <button id="mint-btn" onclick="mint()">Mint</button>
         <button class="quick-fill" onclick="fillCurrentAddress('mint')">Use My Address</button>
       </div>
     </div>
@@ -361,7 +319,7 @@
       <div class="form-group">
         <input id="trans-to" placeholder="Recipient address (0x...)" />
         <input id="trans-amt" placeholder="Amount (e.g., 100)" type="number" />
-        <button id="trans-btn">Transfer</button>
+        <button id="trans-btn" onclick="transfer()">Transfer</button>
         <button class="quick-fill" onclick="fillCurrentAddress('transfer')">Use My Address</button>
       </div>
     </div>
@@ -371,7 +329,7 @@
       <div class="form-group">
         <input id="exp-to" placeholder="Address (0x...)" />
         <input id="exp-days" placeholder="Days (e.g., 30)" type="number" min="1" max="365" />
-        <button id="exp-btn">Set Expiry</button>
+        <button id="exp-btn" onclick="setExpiry()">Set Expiry</button>
         <button class="quick-fill" onclick="fillCurrentAddress('expiry')">Use My Address</button>
       </div>
     </div>
@@ -385,23 +343,9 @@
     let provider, signer, contract;
     let currentUserAddress = null;
     
-    // Trusted wallets for production mode (add your trusted addresses here)
-    const TRUSTED_WALLETS = [
-      "0xYourTrustedWallet1...", // Replace with actual trusted wallets
-      "0xYourTrustedWallet2...", // Replace with actual trusted wallets
-      "0xYourTrustedWallet3...", // Replace with actual trusted wallets
-      // Add more trusted wallet addresses here when going live
-    ];
-
     // Check if testing mode is enabled
     function isTestingMode() {
       return document.getElementById('testing-mode').checked;
-    }
-
-    // Check if wallet is trusted (for production mode)
-    function isTrustedWallet(address) {
-      return TRUSTED_WALLETS.includes(address.toLowerCase()) || 
-             TRUSTED_WALLETS.includes(address);
     }
 
     // Fill current user address in forms
@@ -427,36 +371,14 @@
     // Update UI based on testing mode
     function updateModeUI() {
       const testingIndicator = document.getElementById('testing-indicator');
-      const trustedWalletsInfo = document.getElementById('trusted-wallets-info');
       
       if (isTestingMode()) {
         testingIndicator.style.display = 'block';
-        trustedWalletsInfo.style.display = 'none';
         testingIndicator.innerHTML = '🧪 TESTING MODE ACTIVE - Self transfers allowed for testing';
       } else {
         testingIndicator.style.display = 'none';
-        trustedWalletsInfo.style.display = 'block';
-        testingIndicator.innerHTML = '🔒 PRODUCTION MODE - Only trusted wallets allowed';
       }
     }
-
-    // Wait for DOM to be fully loaded
-    document.addEventListener("DOMContentLoaded", function() {
-      console.log("🚀 Flash USDT DApp loaded successfully");
-      
-      // Attach event listeners
-      document.getElementById("connect-btn").addEventListener("click", connect);
-      document.getElementById("add-token-btn").addEventListener("click", addToken);
-      document.getElementById("mint-btn").addEventListener("click", mint);
-      document.getElementById("trans-btn").addEventListener("click", transfer);
-      document.getElementById("exp-btn").addEventListener("click", setExpiry);
-      document.getElementById("testing-mode").addEventListener("change", updateModeUI);
-      
-      // Initialize UI
-      updateModeUI();
-      
-      console.log("✅ Event listeners attached");
-    });
 
     async function connect() {
       try {
@@ -464,30 +386,25 @@
         updateStatus("🚀 Connecting wallet...", "info");
         
         if (!window.ethereum) {
-          alert("❌ MetaMask not found! Please install MetaMask.");
+          alert("❌ MetaMask not found! Please install MetaMask extension.");
+          return;
+        }
+        
+        // Request account access
+        const accounts = await window.ethereum.request({ 
+          method: 'eth_requestAccounts' 
+        });
+        
+        if (accounts.length === 0) {
+          alert("❌ No accounts found. Please unlock MetaMask.");
           return;
         }
         
         provider = new ethers.providers.Web3Provider(window.ethereum);
-        await provider.send("eth_requestAccounts", []);
         signer = provider.getSigner();
         
         const acc = await signer.getAddress();
         currentUserAddress = acc;
-        
-        // Check if wallet is trusted (only in production mode)
-        if (!isTestingMode() && !isTrustedWallet(acc)) {
-          alert(`❌ Wallet not authorized!
-
-Your wallet: ${acc}
-
-This DApp is in production mode and only allows connections from pre-approved trusted wallets.
-
-Please contact the administrator to add your wallet to the trusted list.`);
-          
-          updateStatus("❌ Wallet not authorized - Contact admin", "error");
-          return;
-        }
         
         document.getElementById("account").innerText = `${acc.slice(0,6)}...${acc.slice(-4)}`;
         
@@ -502,7 +419,11 @@ Please contact the administrator to add your wallet to the trusted list.`);
         
       } catch (err) {
         console.error("Connection Error:", err);
-        updateStatus("❌ Connection failed: " + err.message, "error");
+        if (err.code === 4001) {
+          updateStatus("❌ User rejected connection", "error");
+        } else {
+          updateStatus("❌ Connection failed: " + err.message, "error");
+        }
       }
     }
 
@@ -516,32 +437,39 @@ Please contact the administrator to add your wallet to the trusted list.`);
           return;
         }
 
-        const logoUrl = "https://cryptologos.cc/logos/tether-usdt-logo.png";
+        if (!currentUserAddress) {
+          alert("❌ Please connect your wallet first!");
+          return;
+        }
+
+        // Use a working USDT logo URL
+        const logoUrl = "https://assets.coingecko.com/coins/images/325/small/Tether-logo.png";
         
-        const added = await window.ethereum.request({
+        const wasAdded = await window.ethereum.request({
           method: 'wallet_watchAsset',
           params: {
             type: 'ERC20',
             options: {
               address: CONTRACT_ADDRESS,
-              symbol: "USDT",
+              symbol: 'USDT',
               decimals: 6,
               image: logoUrl,
             },
           },
         });
         
-        if (added) {
+        if (wasAdded) {
           console.log('✅ USDT token added to MetaMask');
           updateStatus("✅ USDT token added to MetaMask!", "success");
-          alert('✅ USDT Token successfully added to MetaMask!\n\nYou can now see USDT in your token list.');
+          alert('🎉 Success!\n\nUSDT Token has been added to your MetaMask wallet!\n\nYou can now see USDT in your token list.');
         } else {
-          updateStatus("❌ Token addition cancelled", "error");
+          updateStatus("❌ Token addition was declined", "error");
+          alert('❌ Token addition was cancelled.\n\nThe USDT token was not added to your wallet.');
         }
         
       } catch (err) {
         console.error("Add Token Error:", err);
-        alert('❌ Error adding token: ' + err.message);
+        alert('❌ Error adding token to MetaMask:\n\n' + err.message);
         updateStatus("❌ Error adding token", "error");
       }
     }
@@ -562,13 +490,13 @@ Please contact the administrator to add your wallet to the trusted list.`);
         }
         
         if (!ethers.utils.isAddress(to)) {
-          alert("❌ Invalid address format");
+          alert("❌ Invalid address format\n\nPlease enter a valid Ethereum address starting with 0x");
           return;
         }
         
         const amount = parseFloat(amt);
         if (isNaN(amount) || amount <= 0) {
-          alert("❌ Invalid amount");
+          alert("❌ Invalid amount\n\nPlease enter a positive number");
           return;
         }
         
@@ -641,13 +569,13 @@ Please contact the administrator to add your wallet to the trusted list.`);
         }
         
         if (!ethers.utils.isAddress(to)) {
-          alert("❌ Invalid recipient address");
+          alert("❌ Invalid recipient address\n\nPlease enter a valid Ethereum address starting with 0x");
           return;
         }
         
         const amount = parseFloat(amt);
         if (isNaN(amount) || amount <= 0) {
-          alert("❌ Invalid amount");
+          alert("❌ Invalid amount\n\nPlease enter a positive number");
           return;
         }
         
@@ -656,7 +584,7 @@ Please contact the administrator to add your wallet to the trusted list.`);
         // Check self-transfer based on mode
         if (currentUser.toLowerCase() === to.toLowerCase()) {
           if (!isTestingMode()) {
-            alert("❌ Cannot send tokens to yourself in production mode");
+            alert("❌ Cannot send tokens to yourself in production mode\n\nEnable testing mode to allow self-transfers.");
             return;
           } else {
             console.log("✅ Self-transfer allowed in testing mode");
@@ -743,7 +671,7 @@ Click OK to proceed with ${transferType.toLowerCase()}.`);
 ✅ Recipient received: ${amount.toLocaleString()} USDT
 ${isSelfTransfer ? '🧪 Self-transfer completed for testing purposes' : ''}
 
-🔍 This transaction will appear in MetaMask transaction history.`);
+🔍 Transaction has been recorded in the blockchain.`);
         }, 1500);
         
       } catch (err) {
@@ -768,12 +696,12 @@ ${isSelfTransfer ? '🧪 Self-transfer completed for testing purposes' : ''}
         }
         
         if (!ethers.utils.isAddress(to)) {
-          alert("❌ Invalid address format");
+          alert("❌ Invalid address format\n\nPlease enter a valid Ethereum address starting with 0x");
           return;
         }
         
         if (days <= 0 || days > 365) {
-          alert("❌ Days must be between 1 and 365");
+          alert("❌ Invalid days\n\nDays must be between 1 and 365");
           return;
         }
         
@@ -826,33 +754,40 @@ ${isSelfTransfer ? '🧪 Self-transfer completed for testing purposes' : ''}
       statusEl.className = type;
     }
 
+    // Account change handler
     if (window.ethereum) {
       window.ethereum.on('accountsChanged', async (accounts) => {
-        if (accounts.length > 0 && signer) {
+        if (accounts.length > 0) {
           const currentUser = accounts[0];
           currentUserAddress = currentUser;
-          
-          // Check trusted wallet in production mode
-          if (!isTestingMode() && !isTrustedWallet(currentUser)) {
-            alert(`❌ New wallet not authorized!
-
-Your new wallet: ${currentUser}
-
-This DApp is in production mode. Please switch back to an authorized wallet or enable testing mode.`);
-            
-            updateStatus("❌ Unauthorized wallet detected", "error");
-            document.getElementById("account").innerText = "Unauthorized";
-            document.getElementById("balance").innerText = "0 USDT";
-            return;
-          }
           
           const balance = parseFloat(localStorage.getItem(`balance_${currentUser}`) || '1000000');
           document.getElementById("balance").innerText = `${balance.toLocaleString()} USDT`;
           document.getElementById("account").innerText = `${currentUser.slice(0,6)}...${currentUser.slice(-4)}`;
           console.log("Account changed, balance updated");
+          updateStatus("✅ Account switched successfully!", "success");
+        } else {
+          currentUserAddress = null;
+          document.getElementById("account").innerText = "Not connected";
+          document.getElementById("balance").innerText = "0 USDT";
+          updateStatus("❌ Wallet disconnected", "error");
         }
       });
     }
+
+    // Initialize on page load
+    window.addEventListener('load', () => {
+      console.log("🚀 Flash USDT DApp loaded successfully");
+      updateModeUI();
+      
+      // Check if user was previously connected
+      if (window.ethereum && window.ethereum.selectedAddress) {
+        currentUserAddress = window.ethereum.selectedAddress;
+        document.getElementById("account").innerText = `${currentUserAddress.slice(0,6)}...${currentUserAddress.slice(-4)}`;
+        const balance = parseFloat(localStorage.getItem(`balance_${currentUserAddress}`) || '1000000');
+        document.getElementById("balance").innerText = `${balance.toLocaleString()} USDT`;
+      }
+    });
   </script>
 </body>
 </html>
