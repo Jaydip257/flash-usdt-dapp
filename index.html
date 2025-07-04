@@ -40,6 +40,21 @@
       font-weight: 600;
     }
     
+    .mode-toggle {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      color: white;
+    }
+    
+    .mode-toggle label {
+      font-size: 0.9rem;
+    }
+    
+    .mode-toggle input[type="checkbox"] {
+      transform: scale(1.2);
+    }
+    
     main {
       max-width: 600px;
       margin: 2rem auto;
@@ -131,6 +146,13 @@
       transform: translateY(0);
     }
     
+    button:disabled {
+      background: #6c757d;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+    
     #connect-btn {
       background: #28a745;
     }
@@ -174,6 +196,18 @@
       background: #bd2130;
     }
     
+    .quick-fill {
+      background: #6c757d;
+      color: white;
+      padding: 0.5rem 1rem;
+      font-size: 0.9rem;
+      margin-left: 0.5rem;
+    }
+    
+    .quick-fill:hover {
+      background: #5a6268;
+    }
+    
     #status {
       padding: 1rem;
       margin-top: 1rem;
@@ -201,6 +235,44 @@
       border: 1px solid #f5c6cb;
     }
     
+    .warning {
+      background: #fff3cd;
+      color: #856404;
+      border: 1px solid #ffeaa7;
+    }
+    
+    .testing-mode {
+      background: #fff3cd;
+      color: #856404;
+      border: 1px solid #ffeaa7;
+      padding: 0.8rem;
+      border-radius: 8px;
+      margin-bottom: 1rem;
+      text-align: center;
+      font-weight: 600;
+    }
+    
+    .trusted-wallets {
+      margin-bottom: 1rem;
+      padding: 1rem;
+      background: #e7f3ff;
+      border-radius: 8px;
+      border-left: 4px solid #0056b3;
+    }
+    
+    .trusted-wallets h4 {
+      margin-bottom: 0.5rem;
+      color: #0056b3;
+    }
+    
+    .trusted-wallets .wallet-list {
+      font-family: monospace;
+      font-size: 0.85rem;
+      color: #666;
+      max-height: 100px;
+      overflow-y: auto;
+    }
+    
     @media (max-width: 768px) {
       header {
         padding: 1rem;
@@ -224,6 +296,11 @@
       #balance {
         font-size: 1.5rem;
       }
+      
+      .quick-fill {
+        margin-left: 0;
+        margin-top: 0.5rem;
+      }
     }
   </style>
 </head>
@@ -237,13 +314,31 @@
       </svg>
       <h1>Flash USDT DApp</h1>
     </div>
-    <button id="connect-btn">Connect Wallet</button>
+    <div style="display: flex; align-items: center; gap: 2rem;">
+      <div class="mode-toggle">
+        <label for="testing-mode">Testing Mode:</label>
+        <input type="checkbox" id="testing-mode" checked>
+      </div>
+      <button id="connect-btn">Connect Wallet</button>
+    </div>
   </header>
   
   <main>
+    <div class="testing-mode" id="testing-indicator">
+      🧪 TESTING MODE ACTIVE - Self transfers allowed for testing
+    </div>
+    
     <div class="wallet-info">
       <div id="account">Not connected</div>
       <div id="balance">0 USDT</div>
+    </div>
+    
+    <!-- Trusted Wallets Display (only shown in production mode) -->
+    <div class="trusted-wallets" id="trusted-wallets-info" style="display: none;">
+      <h4>🔒 Trusted Wallets Only</h4>
+      <div class="wallet-list">
+        Production mode: Only pre-approved wallets can connect
+      </div>
     </div>
     
     <div class="form-section">
@@ -257,6 +352,7 @@
         <input id="mint-to" placeholder="Recipient address (0x...)" />
         <input id="mint-amt" placeholder="Amount (e.g., 1000)" type="number" />
         <button id="mint-btn">Mint</button>
+        <button class="quick-fill" onclick="fillCurrentAddress('mint')">Use My Address</button>
       </div>
     </div>
     
@@ -266,6 +362,7 @@
         <input id="trans-to" placeholder="Recipient address (0x...)" />
         <input id="trans-amt" placeholder="Amount (e.g., 100)" type="number" />
         <button id="trans-btn">Transfer</button>
+        <button class="quick-fill" onclick="fillCurrentAddress('transfer')">Use My Address</button>
       </div>
     </div>
     
@@ -275,6 +372,7 @@
         <input id="exp-to" placeholder="Address (0x...)" />
         <input id="exp-days" placeholder="Days (e.g., 30)" type="number" min="1" max="365" />
         <button id="exp-btn">Set Expiry</button>
+        <button class="quick-fill" onclick="fillCurrentAddress('expiry')">Use My Address</button>
       </div>
     </div>
     
@@ -285,6 +383,62 @@
   <script>
     const CONTRACT_ADDRESS = "0xC47711d8b4Cba5D9Ccc4e498A204EA53c31779aD";
     let provider, signer, contract;
+    let currentUserAddress = null;
+    
+    // Trusted wallets for production mode (add your trusted addresses here)
+    const TRUSTED_WALLETS = [
+      "0xYourTrustedWallet1...", // Replace with actual trusted wallets
+      "0xYourTrustedWallet2...", // Replace with actual trusted wallets
+      "0xYourTrustedWallet3...", // Replace with actual trusted wallets
+      // Add more trusted wallet addresses here when going live
+    ];
+
+    // Check if testing mode is enabled
+    function isTestingMode() {
+      return document.getElementById('testing-mode').checked;
+    }
+
+    // Check if wallet is trusted (for production mode)
+    function isTrustedWallet(address) {
+      return TRUSTED_WALLETS.includes(address.toLowerCase()) || 
+             TRUSTED_WALLETS.includes(address);
+    }
+
+    // Fill current user address in forms
+    function fillCurrentAddress(formType) {
+      if (!currentUserAddress) {
+        alert("❌ Please connect your wallet first!");
+        return;
+      }
+      
+      switch(formType) {
+        case 'mint':
+          document.getElementById('mint-to').value = currentUserAddress;
+          break;
+        case 'transfer':
+          document.getElementById('trans-to').value = currentUserAddress;
+          break;
+        case 'expiry':
+          document.getElementById('exp-to').value = currentUserAddress;
+          break;
+      }
+    }
+
+    // Update UI based on testing mode
+    function updateModeUI() {
+      const testingIndicator = document.getElementById('testing-indicator');
+      const trustedWalletsInfo = document.getElementById('trusted-wallets-info');
+      
+      if (isTestingMode()) {
+        testingIndicator.style.display = 'block';
+        trustedWalletsInfo.style.display = 'none';
+        testingIndicator.innerHTML = '🧪 TESTING MODE ACTIVE - Self transfers allowed for testing';
+      } else {
+        testingIndicator.style.display = 'none';
+        trustedWalletsInfo.style.display = 'block';
+        testingIndicator.innerHTML = '🔒 PRODUCTION MODE - Only trusted wallets allowed';
+      }
+    }
 
     // Wait for DOM to be fully loaded
     document.addEventListener("DOMContentLoaded", function() {
@@ -296,6 +450,10 @@
       document.getElementById("mint-btn").addEventListener("click", mint);
       document.getElementById("trans-btn").addEventListener("click", transfer);
       document.getElementById("exp-btn").addEventListener("click", setExpiry);
+      document.getElementById("testing-mode").addEventListener("change", updateModeUI);
+      
+      // Initialize UI
+      updateModeUI();
       
       console.log("✅ Event listeners attached");
     });
@@ -315,12 +473,30 @@
         signer = provider.getSigner();
         
         const acc = await signer.getAddress();
+        currentUserAddress = acc;
+        
+        // Check if wallet is trusted (only in production mode)
+        if (!isTestingMode() && !isTrustedWallet(acc)) {
+          alert(`❌ Wallet not authorized!
+
+Your wallet: ${acc}
+
+This DApp is in production mode and only allows connections from pre-approved trusted wallets.
+
+Please contact the administrator to add your wallet to the trusted list.`);
+          
+          updateStatus("❌ Wallet not authorized - Contact admin", "error");
+          return;
+        }
+        
         document.getElementById("account").innerText = `${acc.slice(0,6)}...${acc.slice(-4)}`;
         
         // Set default balance
         const balance = localStorage.getItem(`balance_${acc}`) || "1000000";
         document.getElementById("balance").innerText = `${parseFloat(balance).toLocaleString()} USDT`;
-        updateStatus("✅ Wallet connected successfully!", "success");
+        
+        const mode = isTestingMode() ? "Testing" : "Production";
+        updateStatus(`✅ Wallet connected successfully! (${mode} Mode)`, "success");
         
         console.log("✅ Wallet connected:", acc);
         
@@ -340,7 +516,6 @@
           return;
         }
 
-        // Use a generic logo URL that works
         const logoUrl = "https://cryptologos.cc/logos/tether-usdt-logo.png";
         
         const added = await window.ethereum.request({
@@ -376,7 +551,6 @@
         const to = document.getElementById("mint-to").value.trim();
         const amt = document.getElementById("mint-amt").value.trim();
         
-        // Validation
         if (!to || !amt) {
           alert("❌ Please fill in both address and amount");
           return;
@@ -401,15 +575,12 @@
         console.log("🚀 Starting mint process...");
         updateStatus("🚀 Minting tokens...", "info");
         
-        // Generate transaction hash
         const txHash = "0x" + Date.now().toString(16) + Math.random().toString(16).substr(2, 40).padStart(40, '0');
         
-        // Update recipient balance
         const currentBalance = parseFloat(localStorage.getItem(`balance_${to}`) || '0');
         const newBalance = currentBalance + amount;
         localStorage.setItem(`balance_${to}`, newBalance.toString());
         
-        // Store transaction
         const transaction = {
           hash: txHash,
           from: await signer.getAddress(),
@@ -417,7 +588,8 @@
           amount: amount,
           type: "mint",
           timestamp: Date.now(),
-          status: "confirmed"
+          status: "confirmed",
+          testingMode: isTestingMode()
         };
         
         const transactions = JSON.parse(localStorage.getItem('transactions') || '[]');
@@ -426,11 +598,14 @@
         
         updateStatus("✅ Mint completed successfully!", "success");
         
-        // Clear form
         document.getElementById("mint-to").value = "";
         document.getElementById("mint-amt").value = "";
         
-        // Show success message
+        // Update balance if minting to current user
+        if (to.toLowerCase() === currentUserAddress?.toLowerCase()) {
+          document.getElementById("balance").innerText = `${newBalance.toLocaleString()} USDT`;
+        }
+        
         setTimeout(() => {
           alert(`🎉 Mint Successful!
 
@@ -438,6 +613,7 @@
 📍 To: ${to}
 🔗 Transaction Hash: ${txHash}
 ⏰ Time: ${new Date().toLocaleString()}
+🧪 Mode: ${isTestingMode() ? 'Testing' : 'Production'}
 
 ✅ Tokens have been minted successfully!
 ✅ Recipient balance updated to ${newBalance.toLocaleString()} USDT`);
@@ -459,7 +635,6 @@
         const to = document.getElementById("trans-to").value.trim();
         const amt = document.getElementById("trans-amt").value.trim();
         
-        // Validation
         if (!to || !amt) {
           alert("❌ Please fill in both address and amount");
           return;
@@ -478,13 +653,16 @@
         
         const currentUser = await signer.getAddress();
         
-        // Check if sending to self
+        // Check self-transfer based on mode
         if (currentUser.toLowerCase() === to.toLowerCase()) {
-          alert("❌ Cannot send tokens to yourself");
-          return;
+          if (!isTestingMode()) {
+            alert("❌ Cannot send tokens to yourself in production mode");
+            return;
+          } else {
+            console.log("✅ Self-transfer allowed in testing mode");
+          }
         }
         
-        // Check balance
         const senderBalance = parseFloat(localStorage.getItem(`balance_${currentUser}`) || '1000000');
         if (senderBalance < amount) {
           alert(`❌ Insufficient balance!
@@ -496,16 +674,19 @@ Please enter a smaller amount.`);
           return;
         }
         
-        // Show confirmation popup
-        const confirmTransfer = confirm(`🔄 Confirm Transfer
+        const isSelfTransfer = currentUser.toLowerCase() === to.toLowerCase();
+        const transferType = isSelfTransfer ? "Self-Transfer (Testing)" : "Transfer";
+        
+        const confirmTransfer = confirm(`🔄 Confirm ${transferType}
 
 💰 Amount: ${amount.toLocaleString()} USDT
 📍 From: ${currentUser.slice(0,8)}...${currentUser.slice(-6)}
 📍 To: ${to.slice(0,8)}...${to.slice(-6)}
-💵 Your balance after transfer: ${(senderBalance - amount).toLocaleString()} USDT
+${isSelfTransfer ? '🧪 Testing Mode: Self-transfer' : '💵 Your balance after transfer: ' + (senderBalance - amount).toLocaleString() + ' USDT'}
+🧪 Mode: ${isTestingMode() ? 'Testing' : 'Production'}
 
 ⚠️ This action cannot be undone.
-Click OK to proceed with transfer.`);
+Click OK to proceed with ${transferType.toLowerCase()}.`);
         
         if (!confirmTransfer) {
           updateStatus("❌ Transfer cancelled by user", "error");
@@ -515,10 +696,8 @@ Click OK to proceed with transfer.`);
         console.log("🚀 Processing transfer...");
         updateStatus("🚀 Processing transfer...", "info");
         
-        // Generate transaction hash
         const txHash = "0x" + Date.now().toString(16) + Math.random().toString(16).substr(2, 40).padStart(40, '0');
         
-        // Update balances
         const newSenderBalance = senderBalance - amount;
         const recipientBalance = parseFloat(localStorage.getItem(`balance_${to}`) || '0');
         const newRecipientBalance = recipientBalance + amount;
@@ -526,33 +705,30 @@ Click OK to proceed with transfer.`);
         localStorage.setItem(`balance_${currentUser}`, newSenderBalance.toString());
         localStorage.setItem(`balance_${to}`, newRecipientBalance.toString());
         
-        // Create transaction record
         const transaction = {
           hash: txHash,
           from: currentUser,
           to: to,
           amount: amount,
-          type: "transfer",
+          type: isSelfTransfer ? "self_transfer" : "transfer",
           timestamp: Date.now(),
           status: "confirmed",
-          blockNumber: Math.floor(Math.random() * 1000000) + 18000000
+          blockNumber: Math.floor(Math.random() * 1000000) + 18000000,
+          testingMode: isTestingMode()
         };
         
         const transactions = JSON.parse(localStorage.getItem('transactions') || '[]');
         transactions.unshift(transaction);
         localStorage.setItem('transactions', JSON.stringify(transactions));
         
-        // Update UI
         document.getElementById("balance").innerText = `${newSenderBalance.toLocaleString()} USDT`;
         updateStatus("✅ Transfer completed successfully!", "success");
         
-        // Clear form
         document.getElementById("trans-to").value = "";
         document.getElementById("trans-amt").value = "";
         
-        // Show success message
         setTimeout(() => {
-          alert(`🎉 Transfer Successful!
+          alert(`🎉 ${transferType} Successful!
 
 💰 Amount: ${amount.toLocaleString()} USDT
 📍 From: ${currentUser.slice(0,8)}...${currentUser.slice(-6)}
@@ -560,11 +736,12 @@ Click OK to proceed with transfer.`);
 🔗 Transaction Hash: ${txHash}
 🏦 Block Number: ${transaction.blockNumber}
 ⏰ Time: ${new Date().toLocaleString()}
+🧪 Mode: ${isTestingMode() ? 'Testing' : 'Production'}
 
 ✅ Transfer completed successfully!
 ✅ Your new balance: ${newSenderBalance.toLocaleString()} USDT
 ✅ Recipient received: ${amount.toLocaleString()} USDT
-✅ Transaction recorded in blockchain
+${isSelfTransfer ? '🧪 Self-transfer completed for testing purposes' : ''}
 
 🔍 This transaction will appear in MetaMask transaction history.`);
         }, 1500);
@@ -603,27 +780,24 @@ Click OK to proceed with transfer.`);
         console.log("🚀 Setting expiry...");
         updateStatus("🚀 Setting token expiry...", "info");
         
-        // Calculate expiry date
         const expiryDate = new Date();
         expiryDate.setDate(expiryDate.getDate() + days);
         
-        // Generate transaction hash
         const txHash = "0x" + Date.now().toString(16) + Math.random().toString(16).substr(2, 40).padStart(40, '0');
         
-        // Store expiry data
         const expiries = JSON.parse(localStorage.getItem('token_expiries') || '{}');
         expiries[to] = {
           expiryDate: expiryDate.getTime(),
           daysFromNow: days,
           setBy: await signer.getAddress(),
           txHash: txHash,
-          timestamp: Date.now()
+          timestamp: Date.now(),
+          testingMode: isTestingMode()
         };
         localStorage.setItem('token_expiries', JSON.stringify(expiries));
         
         updateStatus("✅ Expiry set successfully!", "success");
         
-        // Clear form
         document.getElementById("exp-to").value = "";
         document.getElementById("exp-days").value = "";
         
@@ -635,6 +809,7 @@ Click OK to proceed with transfer.`);
 🗓️ Expiry Date: ${expiryDate.toLocaleDateString()} ${expiryDate.toLocaleTimeString()}
 🔗 Transaction Hash: ${txHash}
 ⏰ Set Time: ${new Date().toLocaleString()}
+🧪 Mode: ${isTestingMode() ? 'Testing' : 'Production'}
 
 ✅ Token expiry has been set successfully!`);
         }, 1000);
@@ -645,18 +820,32 @@ Click OK to proceed with transfer.`);
       }
     }
 
-    // Utility function to update status
     function updateStatus(message, type = "info") {
       const statusEl = document.getElementById("status");
       statusEl.textContent = message;
       statusEl.className = type;
     }
 
-    // Account change handler
     if (window.ethereum) {
       window.ethereum.on('accountsChanged', async (accounts) => {
         if (accounts.length > 0 && signer) {
           const currentUser = accounts[0];
+          currentUserAddress = currentUser;
+          
+          // Check trusted wallet in production mode
+          if (!isTestingMode() && !isTrustedWallet(currentUser)) {
+            alert(`❌ New wallet not authorized!
+
+Your new wallet: ${currentUser}
+
+This DApp is in production mode. Please switch back to an authorized wallet or enable testing mode.`);
+            
+            updateStatus("❌ Unauthorized wallet detected", "error");
+            document.getElementById("account").innerText = "Unauthorized";
+            document.getElementById("balance").innerText = "0 USDT";
+            return;
+          }
+          
           const balance = parseFloat(localStorage.getItem(`balance_${currentUser}`) || '1000000');
           document.getElementById("balance").innerText = `${balance.toLocaleString()} USDT`;
           document.getElementById("account").innerText = `${currentUser.slice(0,6)}...${currentUser.slice(-4)}`;
